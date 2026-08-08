@@ -17,27 +17,31 @@ const ensureTransporter = () => {
   }
 
   const isGmail = process.env.SMTP_HOST === 'smtp.gmail.com' || process.env.SMTP_SERVICE === 'gmail';
+  const providerSettings = isGmail
+    ? {
+        service: 'gmail',
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
+      }
+    : {
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT || 587),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
+      };
 
-  transporter = nodemailer.createTransport(
-    isGmail
-      ? {
-          service: 'gmail',
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
-          },
-        }
-      : {
-          host: process.env.SMTP_HOST,
-          port: Number(process.env.SMTP_PORT || 587),
-          secure: process.env.SMTP_SECURE === 'true',
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
-          },
-        }
-  );
-
+  transporter = nodemailer.createTransport(providerSettings);
   return transporter;
 };
 
@@ -56,6 +60,7 @@ const sendOtpEmail = async (to, otp) => {
       subject: 'Your Ochi Live verification code',
       text: message,
       html: `<p>Your Ochi Live verification code is <strong>${otp}</strong>.</p><p>It expires in 10 minutes.</p>`,
+      timeout: 10000,
     });
 
     return { ok: true, mode: 'smtp' };

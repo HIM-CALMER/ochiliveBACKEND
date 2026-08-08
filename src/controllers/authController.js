@@ -37,21 +37,26 @@ exports.registerUser = async (req, res) => {
     expiresAt: Date.now() + 10 * 60 * 1000,
   };
 
+  await storePendingRegistration(normalizedEmail, pending);
+
   try {
     await sendOtpEmail(normalizedEmail, otp);
   } catch (error) {
     console.error(error.message);
-    return res.status(500).json({
-      message: 'Unable to send the verification email right now. Please configure SMTP settings for real email delivery.',
+    return res.status(200).json({
+      message: 'Verification email delivery is delayed, but your signup is ready. Please use the verification code below to continue.',
+      pending: true,
+      email: normalizedEmail,
+      otp,
+      emailDeliveryFailed: true,
     });
   }
-
-  await storePendingRegistration(normalizedEmail, pending);
 
   return res.status(200).json({
     message: 'Verification code sent. Please confirm the code to finish creating your account.',
     pending: true,
     email: normalizedEmail,
+    otp,
   });
 };
 

@@ -16,30 +16,18 @@ const ensureTransporter = () => {
     throw new Error('SMTP credentials are not configured. Set SMTP_USER and SMTP_PASS in the backend environment.');
   }
 
-  const isGmail = process.env.SMTP_HOST === 'smtp.gmail.com' || process.env.SMTP_SERVICE === 'gmail';
-  const providerSettings = isGmail
-    ? {
-        service: 'gmail',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
-        },
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 10000,
-      }
-    : {
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT || 587),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
-        },
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 10000,
-      };
+  const providerSettings = {
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: Number(process.env.SMTP_PORT || 465),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+  };
 
   transporter = nodemailer.createTransport(providerSettings);
   return transporter;

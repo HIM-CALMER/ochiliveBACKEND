@@ -34,6 +34,7 @@ const uploadVideoPost = async (req, res) => {
 
   try {
     const video = await Video.create({
+      creatorId: req.user?.id,
       title: title.trim(),
       creatorName: req.user?.name || 'Ochi Creator',
       category: category?.trim() || 'General',

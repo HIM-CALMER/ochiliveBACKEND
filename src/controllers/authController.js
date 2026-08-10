@@ -1,20 +1,30 @@
 const { createToken, sanitizeUser, isValidEmail, isStrongPassword } = require('../utils/auth');
-const { findByEmail, createUser, storePendingRegistration, getPendingRegistration, deletePendingRegistration } = require('../services/userStore');
+const { findByEmail, createUser, storePendingRegistration, getPendingRegistration, deletePendingRegistration, usernameExists } = require('../services/userStore');
 const { sendOtpEmail } = require('../services/emailService');
 
 const getOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 exports.registerUser = async (req, res) => {
-  const { name, email, password } = req.body || {};
+  const { name, email, username, password } = req.body || {};
+  const displayName = name?.trim() || username?.trim();
 
-  if (!name?.trim() || !email?.trim() || !password?.trim()) {
-    return res.status(400).json({ message: 'Please provide your name, email, and password.' });
+  if (!displayName || !email?.trim() || !username?.trim() || !password?.trim()) {
+    return res.status(400).json({ message: 'Please provide your email, username, and password.' });
   }
 
   const normalizedEmail = email.toLowerCase().trim();
+  const normalizedUsername = username.toLowerCase().trim();
 
   if (!isValidEmail(normalizedEmail)) {
     return res.status(400).json({ message: 'Please provide a valid email address.' });
+  }
+
+  if (!/^[a-z0-9_]{3,24}$/.test(normalizedUsername)) {
+    return res.status(400).json({ message: 'Username must be 3-24 characters using only letters, numbers, and underscores.' });
+  }
+
+  if (await usernameExists(normalizedUsername)) {
+    return res.status(409).json({ message: 'That username is already taken.' });
   }
 
   if (!isStrongPassword(password)) {
@@ -30,8 +40,9 @@ exports.registerUser = async (req, res) => {
   const otp = getOtp();
   const pending = {
     id: `pending_${Date.now()}`,
-    name: name.trim(),
+    name: displayName,
     email: normalizedEmail,
+    username: normalizedUsername,
     password: password.trim(),
     otp,
     expiresAt: Date.now() + 10 * 60 * 1000,
@@ -87,7 +98,12 @@ exports.verifyOtp = async (req, res) => {
     id: `user_${Date.now()}`,
     name: pending.name,
     email: pending.email,
+    username: pending.username,
     password: pending.password,
+    profilePictureUrl: '',
+    bio: '',
+    followerIds: [],
+    followingIds: [],
   };
 
   await createUser(newUser);
@@ -117,14 +133,18 @@ exports.sendTestEmail = async (req, res) => {
 };
 
 exports.loginUser = async (req, res) => {
-  const { email, password } = req.body || {};
+  const { email, username, identity, password } = req.body || {};
+  const loginIdentity = identity || email || username;
 
-  if (!email?.trim() || !password?.trim()) {
-    return res.status(400).json({ message: 'Please provide your email and password.' });
+  if (!loginIdentity?.trim() || !password?.trim()) {
+    return res.status(400).json({ message: 'Please provide your email or username and password.' });
   }
 
-  const normalizedEmail = email.toLowerCase().trim();
-  const existingUser = await findByEmail(normalizedEmail);
+  const normalizedIdentity = loginIdentity.toLowerCase().trim();
+  const isEmail = normalizedIdentity.includes('@');
+  const existingUser = isEmail
+    ? await findByEmail(normalizedIdentity)
+    : await require('../services/userStore').findByUsername(normalizedIdentity);
 
   if (!existingUser || existingUser.password !== password.trim()) {
     return res.status(401).json({ message: 'Invalid email or password.' });

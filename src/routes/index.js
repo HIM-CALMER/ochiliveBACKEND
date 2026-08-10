@@ -3,6 +3,8 @@ const { registerUser, loginUser, verifyOtp, sendTestEmail } = require('../contro
 const authenticate = require('../middleware/authGuard');
 const dashboardRoutes = require('./dashboardRoutes');
 const videoRoutes = require('./videoRoutes');
+const profileController = require('../controllers/profileController');
+const profilePictureUpload = require('multer')({ dest: require('path').join(__dirname, '../uploads') });
 const router = express.Router();
 
 router.get('/', (req, res) => {
@@ -19,5 +21,12 @@ router.get('/profile', authenticate, (req, res) => {
 
 router.use('/dashboard', dashboardRoutes);
 router.use('/videos', videoRoutes);
+router.get('/profiles/:username', authenticate, profileController.getProfile);
+router.get('/profiles/:username/posts', authenticate, profileController.getPosts);
+router.get('/profiles/:username/reshares', authenticate, profileController.getReshares);
+router.patch('/profile/me', authenticate, profileController.updateProfile);
+router.post('/profile/me/picture', authenticate, profilePictureUpload.single('picture'), profileController.updateProfilePicture);
+router.post('/profiles/:username/follow', authenticate, profileController.followProfile);
+router.delete('/profiles/:username/follow', authenticate, profileController.unfollowProfile);
 
 module.exports = router;

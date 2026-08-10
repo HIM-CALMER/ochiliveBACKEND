@@ -41,7 +41,7 @@ test('registerUser rejects invalid email formats', async () => {
 });
 
 test('registerUser returns a pending verification response for valid signup data', async () => {
-  const req = { body: { name: 'OTP User', email: 'otp@example.com', password: 'StrongPass123!' } };
+  const req = { body: { name: 'OTP User', email: 'otp@example.com', username: 'otp_user', password: 'StrongPass123!' } };
   const res = createRes();
 
   await registerUser(req, res);

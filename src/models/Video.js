@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const videoSchema = new mongoose.Schema(
   {
+    creatorId: { type: String, index: true },
     title: { type: String, required: true, trim: true },
     creatorName: { type: String, required: true, trim: true },
     category: { type: String, required: true, trim: true, default: 'General' },

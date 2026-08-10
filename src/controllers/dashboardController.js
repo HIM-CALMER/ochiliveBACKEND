@@ -1,3 +1,5 @@
+const { findByEmail } = require('../services/userStore');
+
 const getDashboardSummary = async (req, res) => {
   return res.json({
     totals: {
@@ -41,19 +43,26 @@ const getWalletSummary = async (req, res) => {
 };
 
 const getProfileSummary = async (req, res) => {
-  const user = req.user || { id: 'user_demo', name: 'Ochi Creator', email: 'creator@ochi.live' };
+  const user = req.user || {};
+  const storedUser = user.email ? await findByEmail(user.email) : null;
+  const profileUser = storedUser || user;
+  const name = profileUser.name || 'Ochi Creator';
+  const email = profileUser.email || 'creator@ochi.live';
+  const followerIds = Array.isArray(profileUser.followerIds) ? profileUser.followerIds : [];
+  const followingIds = Array.isArray(profileUser.followingIds) ? profileUser.followingIds : [];
 
   return res.json({
     user: {
-      id: user.id,
-      name: user.name,
-      username: user.email?.split('@')[0] || 'creator',
+      id: profileUser.id || 'user_demo',
+      name,
+      username: email.split('@')[0] || 'creator',
       bio: 'Live creator focused on premium events, audience engagement, and insightful broadcasts.',
       location: 'Remote',
       tier: 'Creator Pro',
     },
     stats: {
-      followers: 32400,
+      followers: followerIds.length,
+      following: followingIds.length,
       streams: 84,
       engagement: '92%',
     },

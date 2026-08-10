@@ -8,6 +8,15 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   profilePictureUrl: { type: String, default: '' },
   bio: { type: String, default: '' },
+  accountType: { type: String, enum: ['creator', 'comedian'], default: 'creator' },
+  comedyProfile: {
+    comedyStyle: { type: String, default: '' },
+    experience: { type: String, default: '' },
+    influences: { type: String, default: '' },
+    motivation: { type: String, default: '' },
+    audience: { type: String, default: '' },
+    completedAt: { type: Date, default: null },
+  },
   followerIds: { type: [String], default: [] },
   followingIds: { type: [String], default: [] },
 }, { timestamps: true });

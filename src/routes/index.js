@@ -26,6 +26,7 @@ router.get('/profiles/:username/posts', authenticate, profileController.getPosts
 router.get('/profiles/:username/reshares', authenticate, profileController.getReshares);
 router.patch('/profile/me', authenticate, profileController.updateProfile);
 router.post('/profile/me/picture', authenticate, profilePictureUpload.single('picture'), profileController.updateProfilePicture);
+router.post('/profile/me/comedy-onboarding', authenticate, profileController.completeComedyOnboarding);
 router.post('/profiles/:username/follow', authenticate, profileController.followProfile);
 router.delete('/profiles/:username/follow', authenticate, profileController.unfollowProfile);
 

@@ -22,6 +22,8 @@ const sanitizeUser = (user) => ({
   email: user.email,
   username: user.username,
   profilePictureUrl: user.profilePictureUrl || '',
+  accountType: user.accountType || 'creator',
+  comedyProfile: user.comedyProfile || null,
 });
 
 const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);

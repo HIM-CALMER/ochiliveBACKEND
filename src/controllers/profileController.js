@@ -11,6 +11,8 @@ const publicUser = (user) => ({
   username: user.username,
   bio: user.bio || '',
   profilePictureUrl: user.profilePictureUrl || '',
+  accountType: user.accountType || 'creator',
+  comedyProfile: user.comedyProfile || null,
 });
 
 const profilePayload = (user, viewerId) => ({
@@ -29,7 +31,9 @@ const getProfile = async (req, res) => {
   const username = req.params.username || req.user.username;
   const user = await findByUsername(username);
   if (!user) return res.status(404).json({ message: 'Profile not found.' });
-  return res.json(profilePayload(user, req.user.id));
+  const payload = profilePayload(user, req.user.id);
+  if (isMongoReady()) payload.stats.posts = await Video.countDocuments({ creatorId: user.id, status: { $in: ['published', 'queued'] } });
+  return res.json(payload);
 };
 
 const updateProfile = async (req, res) => {
@@ -63,6 +67,28 @@ const updateProfilePicture = async (req, res) => {
   const updated = await updateById(req.user.id, { profilePictureUrl: picture });
   if (!updated) return res.status(404).json({ message: 'Profile not found.' });
   return res.json(profilePayload(updated, req.user.id));
+};
+
+const completeComedyOnboarding = async (req, res) => {
+  const { comedyStyle, experience, influences, motivation, audience } = req.body || {};
+  const answers = { comedyStyle, experience, influences, motivation, audience };
+  if (Object.values(answers).some((value) => !String(value || '').trim())) {
+    return res.status(400).json({ message: 'Please answer every comedy onboarding question.' });
+  }
+
+  const updated = await updateById(req.user.id, {
+    accountType: 'comedian',
+    comedyProfile: {
+      comedyStyle: comedyStyle.trim(),
+      experience: experience.trim(),
+      influences: influences.trim(),
+      motivation: motivation.trim(),
+      audience: audience.trim(),
+      completedAt: new Date(),
+    },
+  });
+  if (!updated) return res.status(404).json({ message: 'Profile not found.' });
+  return res.json({ ...profilePayload(updated, req.user.id), message: 'You are now a comedian on Ochi Live.' });
 };
 
 const followProfile = async (req, res) => {
@@ -116,4 +142,4 @@ const getReshares = async (req, res) => {
   return res.json(reshares.map((item) => ({ ...formatPost(postMap.get(item.postId) || {}), resharedAt: item.createdAt })));
 };
 
-module.exports = { getProfile, updateProfile, updateProfilePicture, followProfile, unfollowProfile, getPosts, getReshares };
+module.exports = { getProfile, updateProfile, updateProfilePicture, completeComedyOnboarding, followProfile, unfollowProfile, getPosts, getReshares };

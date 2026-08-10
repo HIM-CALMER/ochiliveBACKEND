@@ -102,6 +102,8 @@ exports.verifyOtp = async (req, res) => {
     password: pending.password,
     profilePictureUrl: '',
     bio: '',
+    accountType: 'creator',
+    comedyProfile: {},
     followerIds: [],
     followingIds: [],
   };

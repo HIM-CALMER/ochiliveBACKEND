@@ -1,9 +1,11 @@
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const Video = require('../models/Video');
 const Reshare = require('../models/Reshare');
-const { findByUsername, updateById, updateRelationships, usernameExists } = require('../services/userStore');
+const { findByUsername, searchUsers, updateById, updateRelationships, usernameExists } = require('../services/userStore');
+const { countVideosByCreator, listVideosByCreator } = require('../services/videoStore');
 
-const isMongoReady = () => Boolean(process.env.MONGO_URI);
+const isMongoReady = () => mongoose.connection.readyState === 1 && typeof Video !== 'undefined';
 
 const publicUser = (user) => ({
   id: user.id,
@@ -24,6 +26,8 @@ const profilePayload = (user, viewerId) => ({
   relationship: {
     isOwnProfile: user.id === viewerId,
     isFollowing: Array.isArray(user.followerIds) && user.followerIds.includes(viewerId),
+    isFollowedBy: Array.isArray(user.followingIds) && user.followingIds.includes(viewerId),
+    isMutual: Array.isArray(user.followerIds) && Array.isArray(user.followingIds) && user.followerIds.includes(viewerId) && user.followingIds.includes(viewerId),
   },
 });
 
@@ -32,7 +36,11 @@ const getProfile = async (req, res) => {
   const user = await findByUsername(username);
   if (!user) return res.status(404).json({ message: 'Profile not found.' });
   const payload = profilePayload(user, req.user.id);
-  if (isMongoReady()) payload.stats.posts = await Video.countDocuments({ creatorId: user.id, status: { $in: ['published', 'queued'] } });
+  if (isMongoReady()) {
+    payload.stats.posts = await Video.countDocuments({ creatorId: user.id, status: { $in: ['published', 'queued'] } });
+  } else {
+    payload.stats.posts = await countVideosByCreator(user.id);
+  }
   return res.json(payload);
 };
 
@@ -102,6 +110,44 @@ const followProfile = async (req, res) => {
   return res.json({ ...profilePayload(updated, req.user.id), message: 'Profile followed.' });
 };
 
+const searchProfiles = async (req, res) => {
+  const query = String(req.query?.q || '').trim();
+  if (!query) return res.json({ query, results: [] });
+
+  const users = await searchUsers(query, 12);
+  const viewerId = req.user?.id;
+
+  const results = (users || [])
+    .filter((user) => user?.username && user?.id !== viewerId)
+    .map((user) => {
+      const isFollowing = Array.isArray(user.followerIds) && user.followerIds.includes(viewerId);
+      const isFollowedBy = Array.isArray(user.followingIds) && user.followingIds.includes(viewerId);
+
+      return {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        bio: user.bio || '',
+        profilePictureUrl: user.profilePictureUrl || '',
+        accountType: user.accountType || 'creator',
+        isFollowing,
+        isFollowedBy,
+        isMutual: isFollowing && isFollowedBy,
+        relationship: {
+          isFollowing,
+          isFollowedBy,
+          isMutual: isFollowing && isFollowedBy,
+        },
+        stats: {
+          followers: Array.isArray(user.followerIds) ? user.followerIds.length : 0,
+          following: Array.isArray(user.followingIds) ? user.followingIds.length : 0,
+        },
+      };
+    });
+
+  return res.json({ query, results });
+};
+
 const unfollowProfile = async (req, res) => {
   const target = await findByUsername(req.params.username);
   if (!target) return res.status(404).json({ message: 'Profile not found.' });
@@ -127,7 +173,20 @@ const formatPost = (post) => ({
 const getPosts = async (req, res) => {
   const user = await findByUsername(req.params.username);
   if (!user) return res.status(404).json({ message: 'Profile not found.' });
-  if (!isMongoReady()) return res.json([]);
+  if (!isMongoReady()) {
+    const posts = await listVideosByCreator(user.id);
+    return res.json(posts.map((post) => ({
+      id: post.id || post._id,
+      title: post.title,
+      description: post.description || '',
+      mediaUrl: post.mediaUrl,
+      thumbnailUrl: post.thumbnailUrl || post.mediaUrl,
+      category: post.category,
+      duration: post.duration || '',
+      createdAt: post.createdAt,
+      type: post.type,
+    })));
+  }
   const posts = await Video.find({ creatorId: user.id, status: { $in: ['published', 'queued'] } }).sort({ createdAt: -1 }).lean();
   return res.json(posts.map(formatPost));
 };
@@ -142,4 +201,4 @@ const getReshares = async (req, res) => {
   return res.json(reshares.map((item) => ({ ...formatPost(postMap.get(item.postId) || {}), resharedAt: item.createdAt })));
 };
 
-module.exports = { getProfile, updateProfile, updateProfilePicture, completeComedyOnboarding, followProfile, unfollowProfile, getPosts, getReshares };
+module.exports = { getProfile, updateProfile, updateProfilePicture, completeComedyOnboarding, followProfile, unfollowProfile, searchProfiles, getPosts, getReshares };

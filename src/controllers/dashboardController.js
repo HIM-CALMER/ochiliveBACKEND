@@ -71,9 +71,56 @@ const getProfileSummary = async (req, res) => {
 
 const getNotifications = async (req, res) => {
   return res.json([
-    { id: 'note_1', title: 'New booking request', description: 'Your upcoming stream was promoted on the homepage.', time: '2m ago' },
-    { id: 'note_2', title: 'Wallet payout ready', description: 'A new payout is queued and ready for withdrawal.', time: '14m ago' },
-    { id: 'note_3', title: 'Room trending', description: 'Creator Lounge is now trending in the top 5.', time: '36m ago' },
+    {
+      id: 'note_follow_1',
+      type: 'follow',
+      title: 'New follower',
+      description: 'Ava Brooks started following you.',
+      actor: 'Ava Brooks',
+      username: '@ava',
+      time: '2m ago',
+      unread: true,
+    },
+    {
+      id: 'note_like_1',
+      type: 'like',
+      title: 'Video liked',
+      description: 'Milo liked your latest comedy set.',
+      actor: 'Milo Smith',
+      username: '@milo',
+      time: '18m ago',
+      unread: true,
+    },
+    {
+      id: 'note_comment_1',
+      type: 'comment',
+      title: 'New comment',
+      description: 'Nia said: “This was hilarious. Keep going.”',
+      actor: 'Nia James',
+      username: '@nia',
+      time: '41m ago',
+      unread: false,
+    },
+    {
+      id: 'note_follow_back_1',
+      type: 'follow-back',
+      title: 'Follow back',
+      description: 'Jules followed you back and you are now mutual friends.',
+      actor: 'Jules Carter',
+      username: '@jules',
+      time: '1h ago',
+      unread: false,
+    },
+    {
+      id: 'note_mention_1',
+      type: 'mention',
+      title: 'Mentioned in a post',
+      description: 'King mentioned you in their latest reel.',
+      actor: 'King Duvall',
+      username: '@king',
+      time: '3h ago',
+      unread: false,
+    },
   ]);
 };
 

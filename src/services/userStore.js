@@ -1,9 +1,10 @@
+const mongoose = require('mongoose');
 const User = require('../models/User');
 
 const memoryUsers = [];
 const pendingRegistrations = new Map();
 
-const isMongoReady = () => typeof User !== 'undefined' && process.env.MONGO_URI;
+const isMongoReady = () => mongoose.connection.readyState === 1 && typeof User !== 'undefined';
 
 const findByEmail = async (email) => {
   if (!isMongoReady()) {
@@ -38,6 +39,34 @@ const findByUsername = async (username) => {
   } catch (error) {
     console.warn('MongoDB unavailable for findByUsername, falling back to memory store:', error.message);
     return memoryUsers.find((user) => user.username === normalized) || null;
+  }
+};
+
+const searchUsers = async (query, limit = 12) => {
+  const normalized = String(query || '').trim();
+  if (!normalized) return [];
+  const safeQuery = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(safeQuery, 'i');
+
+  if (!isMongoReady()) {
+    return memoryUsers
+      .filter((user) => regex.test(user.username) || regex.test(user.name) || regex.test(user.email))
+      .slice(0, limit);
+  }
+
+  try {
+    return await User.find({
+      $or: [
+        { username: regex },
+        { name: regex },
+        { email: regex },
+      ],
+    }).limit(limit).lean();
+  } catch (error) {
+    console.warn('MongoDB unavailable for searchUsers, falling back to memory store:', error.message);
+    return memoryUsers
+      .filter((user) => regex.test(user.username) || regex.test(user.name) || regex.test(user.email))
+      .slice(0, limit);
   }
 };
 
@@ -117,6 +146,7 @@ module.exports = {
   findByEmail,
   findById,
   findByUsername,
+  searchUsers,
   updateById,
   updateRelationships,
   usernameExists,

@@ -21,6 +21,7 @@ router.get('/profile', authenticate, (req, res) => {
 
 router.use('/dashboard', dashboardRoutes);
 router.use('/videos', videoRoutes);
+router.get('/search/profiles', authenticate, profileController.searchProfiles);
 router.get('/profiles/:username', authenticate, profileController.getProfile);
 router.get('/profiles/:username/posts', authenticate, profileController.getPosts);
 router.get('/profiles/:username/reshares', authenticate, profileController.getReshares);

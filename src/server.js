@@ -60,13 +60,12 @@ const startServer = (port) => {
     console.log(`Server listening on port ${port}`);
   }).on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
-      const nextPort = port + 1;
-      console.log(`Port ${port} is busy. Trying ${nextPort} instead.`);
-      startServer(nextPort);
-    } else {
-      console.error(err);
+      console.error(`Port ${port} is already in use. Another Ochi Live backend instance is running. Stop the stale server before starting a new one.`);
       process.exit(1);
     }
+
+    console.error(err);
+    process.exit(1);
   });
 };
 

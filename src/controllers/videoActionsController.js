@@ -3,6 +3,7 @@ const Video = require('../models/Video');
 const Reshare = require('../models/Reshare');
 const { toggleSavedVideo, getSavedVideoIds } = require('../services/savedStore');
 const { findVideoById: findMemoryVideoById, updateLikeState, addCommentToVideo } = require('../services/videoStore');
+const { createNotification } = require('../services/notificationStore');
 
 const isMongoReady = () => mongoose.connection.readyState === 1 && typeof Video !== 'undefined';
 
@@ -28,6 +29,7 @@ const findVideoById = async (id) => {
 
 const formatVideo = (video) => ({
   id: (video._id || video.id)?.toString?.() || video.id,
+  creatorId: video.creatorId,
   title: video.title,
   creatorName: video.creatorName,
   category: video.category,
@@ -77,6 +79,7 @@ const likeVideo = async (req, res) => {
       }
 
       const updated = await updateLikeState(req.params.id, req.user.id);
+      await createNotification({ recipientId: updated.creatorId, actorId: req.user.id, actorName: req.user.name, actorUsername: req.user.username, actorProfilePictureUrl: req.user.profilePictureUrl, type: 'like', videoId: updated.id, videoTitle: updated.title });
       return res.json({ ...formatVideo(updated), liked: true, message: 'Video liked.' });
     }
 
@@ -94,6 +97,8 @@ const likeVideo = async (req, res) => {
       { $addToSet: { likedBy: req.user.id }, $inc: { likes: 1 } },
       { new: true }
     ).lean();
+
+    await createNotification({ recipientId: updated.creatorId, actorId: req.user.id, actorName: req.user.name, actorUsername: req.user.username, actorProfilePictureUrl: req.user.profilePictureUrl, type: 'like', videoId: updated._id.toString(), videoTitle: updated.title });
 
     return res.json({ ...formatVideo(updated), liked: true, message: 'Video liked.' });
   } catch (error) {
@@ -124,6 +129,7 @@ const commentOnVideo = async (req, res) => {
       };
 
       const updated = await addCommentToVideo(req.params.id, entry);
+      await createNotification({ recipientId: updated.creatorId, actorId: req.user.id, actorName: req.user.name, actorUsername: req.user.username, actorProfilePictureUrl: req.user.profilePictureUrl, type: 'comment', videoId: updated.id, videoTitle: updated.title, comment: cleanedComment });
       return res.status(201).json({
         message: 'Comment created successfully.',
         comment: entry,
@@ -147,6 +153,7 @@ const commentOnVideo = async (req, res) => {
     video.commentThread.push(commentEntry);
     video.comments = Number(video.comments || 0) + 1;
     await video.save();
+    await createNotification({ recipientId: video.creatorId, actorId: req.user.id, actorName: req.user.name, actorUsername: req.user.username, actorProfilePictureUrl: req.user.profilePictureUrl, type: 'comment', videoId: video._id.toString(), videoTitle: video.title, comment: cleanedComment });
 
     return res.status(201).json({
       message: 'Comment created successfully.',
@@ -167,6 +174,7 @@ const reshareVideo = async (req, res) => {
       { userId: req.user.id, postId: video._id.toString() },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
+    await createNotification({ recipientId: video.creatorId, actorId: req.user.id, actorName: req.user.name, actorUsername: req.user.username, actorProfilePictureUrl: req.user.profilePictureUrl, type: 'reshare', videoId: video._id.toString(), videoTitle: video.title });
 
     return res.json({
       message: 'Post reshared.',
@@ -182,6 +190,7 @@ const toggleSaveVideo = async (req, res) => {
   try {
     const video = await findVideoById(req.params.id);
     const result = await toggleSavedVideo(req.user.token, req.params.id);
+    if (result.saved) await createNotification({ recipientId: video.creatorId, actorId: req.user.id, actorName: req.user.name, actorUsername: req.user.username, actorProfilePictureUrl: req.user.profilePictureUrl, type: 'save', videoId: video.id || video._id?.toString(), videoTitle: video.title });
     return res.json({ ...result, video: formatVideo(video) });
   } catch (error) {
     return res.status(error.status || 500).json({ message: error.message || 'Unable to save video.' });

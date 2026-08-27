@@ -1,4 +1,5 @@
 const { findByEmail } = require('../services/userStore');
+const { listNotifications, markNotificationRead, markAllNotificationsRead } = require('../services/notificationStore');
 
 const getDashboardSummary = async (req, res) => {
   return res.json({
@@ -70,58 +71,30 @@ const getProfileSummary = async (req, res) => {
 };
 
 const getNotifications = async (req, res) => {
-  return res.json([
-    {
-      id: 'note_follow_1',
-      type: 'follow',
-      title: 'New follower',
-      description: 'Ava Brooks started following you.',
-      actor: 'Ava Brooks',
-      username: '@ava',
-      time: '2m ago',
-      unread: true,
-    },
-    {
-      id: 'note_like_1',
-      type: 'like',
-      title: 'Video liked',
-      description: 'Milo liked your latest comedy set.',
-      actor: 'Milo Smith',
-      username: '@milo',
-      time: '18m ago',
-      unread: true,
-    },
-    {
-      id: 'note_comment_1',
-      type: 'comment',
-      title: 'New comment',
-      description: 'Nia said: “This was hilarious. Keep going.”',
-      actor: 'Nia James',
-      username: '@nia',
-      time: '41m ago',
-      unread: false,
-    },
-    {
-      id: 'note_follow_back_1',
-      type: 'follow-back',
-      title: 'Follow back',
-      description: 'Jules followed you back and you are now mutual friends.',
-      actor: 'Jules Carter',
-      username: '@jules',
-      time: '1h ago',
-      unread: false,
-    },
-    {
-      id: 'note_mention_1',
-      type: 'mention',
-      title: 'Mentioned in a post',
-      description: 'King mentioned you in their latest reel.',
-      actor: 'King Duvall',
-      username: '@king',
-      time: '3h ago',
-      unread: false,
-    },
-  ]);
+  const type = ['like', 'comment', 'save', 'follow', 'follow-back', 'reshare', 'mention'].includes(req.query?.type) ? req.query.type : null;
+  const records = await listNotifications(req.user.id, type);
+  const notifications = records.map((item) => ({
+    ...item,
+    id: item.id || item._id?.toString(),
+    title: { like: 'Video liked', comment: 'New comment', save: 'Video saved', follow: 'New follower', 'follow-back': 'Followed back', reshare: 'Post reshared', mention: 'Mentioned in a post' }[item.type] || 'New activity',
+    description: item.type === 'comment' ? `${item.actorName || item.actorUsername} said: “${item.comment}”` : `${item.actorName || item.actorUsername} ${item.type === 'follow' ? 'started following you.' : item.type === 'save' ? 'saved your video.' : item.type === 'like' ? 'liked your video.' : item.type === 'reshare' ? 'reshared your post.' : 'interacted with your content.'}`,
+    actor: item.actorName || item.actorUsername,
+    username: item.actorUsername ? `@${item.actorUsername.replace(/^@/, '')}` : '',
+    time: new Date(item.createdAt).toLocaleString(),
+    unread: !item.readAt,
+  }));
+  return res.json({ notifications, unreadCount: notifications.filter((item) => item.unread).length });
+};
+
+const readNotification = async (req, res) => {
+  const updated = await markNotificationRead(req.params.id, req.user.id);
+  if (!updated) return res.status(404).json({ message: 'Notification not found.' });
+  return res.json({ ok: true });
+};
+
+const readAllNotifications = async (req, res) => {
+  await markAllNotificationsRead(req.user.id);
+  return res.json({ ok: true });
 };
 
 const getActivityFeed = async (req, res) => {
@@ -158,6 +131,8 @@ module.exports = {
   getWalletSummary,
   getProfileSummary,
   getNotifications,
+  readNotification,
+  readAllNotifications,
   getActivityFeed,
   uploadAsset,
 };

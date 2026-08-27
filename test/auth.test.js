@@ -3,7 +3,7 @@ process.env.NODE_ENV = 'test';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Module = require('module');
-const { registerUser } = require('../src/controllers/authController');
+const { registerUser, checkUsernameAvailability } = require('../src/controllers/authController');
 const { createUser } = require('../src/services/userStore');
 const { searchProfiles } = require('../src/controllers/profileController');
 
@@ -52,6 +52,41 @@ test('registerUser returns a pending verification response for valid signup data
   assert.equal(res.body.pending, true);
   assert.equal(res.body.email, 'otp@example.com');
   assert.match(res.body.message, /verification/i);
+});
+
+test('username availability rejects reserved names', async () => {
+  const req = { query: { username: 'support' } };
+  const res = createRes();
+
+  await checkUsernameAvailability(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.available, false);
+  assert.equal(res.body.reason, 'reserved');
+});
+
+test('username availability returns suggestions for a taken name', async () => {
+  await createUser({
+    id: 'availability-user-1',
+    name: 'Taken User',
+    email: 'taken.availability@example.com',
+    username: 'taken_name',
+    password: 'hashed-password',
+    profilePictureUrl: '',
+    bio: '',
+    accountType: 'creator',
+    followerIds: [],
+    followingIds: [],
+  });
+  const req = { query: { username: 'taken_name' } };
+  const res = createRes();
+
+  await checkUsernameAvailability(req, res);
+
+  assert.equal(res.body.available, false);
+  assert.equal(res.body.reason, 'taken');
+  assert.ok(res.body.suggestions.length > 0);
+  assert.ok(!res.body.suggestions.includes('taken_name'));
 });
 
 test('searchProfiles returns users matching the query', async () => {

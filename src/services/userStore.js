@@ -3,6 +3,9 @@ const User = require('../models/User');
 
 const memoryUsers = [];
 const pendingRegistrations = new Map();
+const pendingRegistrationIdsByEmail = new Map();
+const usernameReservations = new Map();
+const passwordResets = new Map();
 
 const isMongoReady = () => mongoose.connection.readyState === 1 && typeof User !== 'undefined';
 
@@ -18,6 +21,18 @@ const findByEmail = async (email) => {
     return memoryUsers.find((user) => user.email === email) || null;
   }
 };
+
+const findUsersByEmail = async (email) => {
+  if (!isMongoReady()) return memoryUsers.filter((user) => user.email === email);
+  try {
+    return await User.find({ email }).lean();
+  } catch (error) {
+    console.warn('MongoDB unavailable for findUsersByEmail, falling back to memory store:', error.message);
+    return memoryUsers.filter((user) => user.email === email);
+  }
+};
+
+const countUsersByEmail = async (email) => (await findUsersByEmail(email)).length;
 
 const findById = async (id) => {
   if (!id) return null;
@@ -107,12 +122,29 @@ const updateRelationships = async (id, update) => {
 
 const usernameExists = async (username, exceptId) => {
   const normalized = username.toLowerCase();
+  const reservation = usernameReservations.get(normalized);
+  if (reservation && reservation.expiresAt > Date.now() && reservation.userId !== exceptId) return true;
+  if (reservation && reservation.expiresAt <= Date.now()) usernameReservations.delete(normalized);
   if (!isMongoReady()) return memoryUsers.some((user) => user.username === normalized && user.id !== exceptId);
   try {
     return Boolean(await User.findOne({ username: normalized, ...(exceptId ? { id: { $ne: exceptId } } : {}) }).lean());
   } catch (error) {
     return memoryUsers.some((user) => user.username === normalized && user.id !== exceptId);
   }
+};
+
+const reserveUsername = async (username, email, expiresAt) => {
+  const normalized = username.toLowerCase();
+  const existing = usernameReservations.get(normalized);
+  if (existing && existing.expiresAt > Date.now() && existing.email !== email) return false;
+  usernameReservations.set(normalized, { email, expiresAt });
+  return true;
+};
+
+const releaseUsernameReservation = async (username, email) => {
+  const normalized = username.toLowerCase();
+  const reservation = usernameReservations.get(normalized);
+  if (reservation?.email === email) usernameReservations.delete(normalized);
 };
 
 const createUser = async (user) => {
@@ -125,6 +157,7 @@ const createUser = async (user) => {
     const created = await User.create(user);
     return created.toObject();
   } catch (error) {
+    if (error.code === 11000) throw error;
     console.warn('MongoDB unavailable for createUser, falling back to memory store:', error.message);
     memoryUsers.push(user);
     return user;
@@ -132,18 +165,39 @@ const createUser = async (user) => {
 };
 
 const storePendingRegistration = async (email, payload) => {
-  pendingRegistrations.set(email, payload);
+  const previousId = pendingRegistrationIdsByEmail.get(email);
+  if (previousId) pendingRegistrations.delete(previousId);
+  pendingRegistrations.set(payload.id, payload);
+  pendingRegistrationIdsByEmail.set(email, payload.id);
   return payload;
 };
 
-const getPendingRegistration = async (email) => pendingRegistrations.get(email) || null;
+const getPendingRegistration = async (email) => {
+  const id = pendingRegistrationIdsByEmail.get(email);
+  return (id && pendingRegistrations.get(id)) || null;
+};
 
 const deletePendingRegistration = async (email) => {
-  pendingRegistrations.delete(email);
+  const id = pendingRegistrationIdsByEmail.get(email);
+  if (id) pendingRegistrations.delete(id);
+  pendingRegistrationIdsByEmail.delete(email);
+};
+
+const storePasswordReset = async (email, payload) => {
+  passwordResets.set(email, payload);
+  return payload;
+};
+
+const getPasswordReset = async (email) => passwordResets.get(email) || null;
+
+const deletePasswordReset = async (email) => {
+  passwordResets.delete(email);
 };
 
 module.exports = {
   findByEmail,
+  findUsersByEmail,
+  countUsersByEmail,
   findById,
   findByUsername,
   searchUsers,
@@ -154,4 +208,9 @@ module.exports = {
   storePendingRegistration,
   getPendingRegistration,
   deletePendingRegistration,
+  reserveUsername,
+  releaseUsernameReservation,
+  storePasswordReset,
+  getPasswordReset,
+  deletePasswordReset,
 };

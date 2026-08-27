@@ -57,6 +57,25 @@ const sendOtpEmail = async (to, otp) => {
   }
 };
 
+const sendPasswordResetEmail = async (to, otp) => {
+  const message = `Your Ochi Live password reset code is ${otp}. It expires in 10 minutes.`;
+  const mailTransport = ensureTransporter();
+
+  if (!mailTransport) throw new Error('SMTP transport is not configured.');
+
+  await mailTransport.sendMail({
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to,
+    subject: 'Reset your Ochi Live password',
+    text: message,
+    html: `<p>Your Ochi Live password reset code is <strong>${otp}</strong>.</p><p>It expires in 10 minutes.</p>`,
+    timeout: 10000,
+  });
+
+  return { ok: true, mode: 'smtp' };
+};
+
 module.exports = {
   sendOtpEmail,
+  sendPasswordResetEmail,
 };

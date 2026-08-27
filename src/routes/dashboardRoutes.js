@@ -6,6 +6,8 @@ const {
   getWalletSummary,
   getProfileSummary,
   getNotifications,
+  readNotification,
+  readAllNotifications,
   getActivityFeed,
   uploadAsset,
 } = require('../controllers/dashboardController');
@@ -17,6 +19,8 @@ router.get('/discover', authenticate, getDiscoverItems);
 router.get('/wallet', authenticate, getWalletSummary);
 router.get('/profile', authenticate, getProfileSummary);
 router.get('/notifications', authenticate, getNotifications);
+router.patch('/notifications/:id/read', authenticate, readNotification);
+router.post('/notifications/read-all', authenticate, readAllNotifications);
 router.get('/activity', authenticate, getActivityFeed);
 router.post('/upload', authenticate, uploadAsset);
 

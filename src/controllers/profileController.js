@@ -4,6 +4,8 @@ const Video = require('../models/Video');
 const Reshare = require('../models/Reshare');
 const { findByUsername, searchUsers, updateById, updateRelationships, usernameExists } = require('../services/userStore');
 const { countVideosByCreator, listVideosByCreator } = require('../services/videoStore');
+const { getUsernameValidation, normalizeUsername } = require('../utils/usernamePolicy');
+const { createNotification } = require('../services/notificationStore');
 
 const isMongoReady = () => mongoose.connection.readyState === 1 && typeof Video !== 'undefined';
 
@@ -52,8 +54,12 @@ const updateProfile = async (req, res) => {
     updates.name = name.trim();
   }
   if (username !== undefined) {
-    const normalized = username.toLowerCase().trim();
-    if (!/^[a-z0-9_]{3,24}$/.test(normalized)) return res.status(400).json({ message: 'Username must be 3-24 characters using only letters, numbers, and underscores.' });
+    const normalized = normalizeUsername(username);
+    const validation = getUsernameValidation(normalized);
+    if (!validation.valid) {
+      if (validation.reason === 'reserved') return res.status(400).json({ message: 'That username is reserved by Ochi Live. Please choose another one.' });
+      return res.status(400).json({ message: 'Username must be 3-24 characters using only letters, numbers, and underscores.' });
+    }
     if (await usernameExists(normalized, req.user.id)) return res.status(409).json({ message: 'That username is already taken.' });
     updates.username = normalized;
   }
@@ -103,10 +109,12 @@ const followProfile = async (req, res) => {
   const target = await findByUsername(req.params.username);
   if (!target) return res.status(404).json({ message: 'Profile not found.' });
   if (target.id === req.user.id) return res.status(400).json({ message: 'You cannot follow yourself.' });
+  const alreadyFollowing = Array.isArray(target.followerIds) && target.followerIds.includes(req.user.id);
   const targetFollowers = Array.from(new Set([...(target.followerIds || []), req.user.id]));
   const viewerFollowing = Array.from(new Set([...(req.user.followingIds || []), target.id]));
   const updated = await updateRelationships(target.id, { followerIds: targetFollowers });
   await updateRelationships(req.user.id, { followingIds: viewerFollowing });
+  if (!alreadyFollowing) await createNotification({ recipientId: target.id, actorId: req.user.id, actorName: req.user.name, actorUsername: req.user.username, actorProfilePictureUrl: req.user.profilePictureUrl, type: 'follow' });
   return res.json({ ...profilePayload(updated, req.user.id), message: 'Profile followed.' });
 };
 

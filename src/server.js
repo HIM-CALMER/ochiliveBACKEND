@@ -1,8 +1,11 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const express = require('express');
 const cors = require('cors');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
+const { verifyToken } = require('./utils/auth');
+const { findById } = require('./services/userStore');
+const { setRealtimeServer } = require('./services/realtime');
 const connectDB = require('./config/db');
 const apiRoutes = require('./routes');
 
@@ -28,8 +31,25 @@ const io = new Server(server, {
   },
 });
 
+setRealtimeServer(io);
+
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
+    const payload = token ? verifyToken(token) : null;
+    if (!payload) return next(new Error('Authentication required.'));
+    const user = await findById(payload.sub);
+    if (!user) return next(new Error('Account not found.'));
+    socket.userId = user.id;
+    return next();
+  } catch (error) {
+    return next(new Error('Invalid session.'));
+  }
+});
+
 io.on('connection', (socket) => {
   console.log('Socket connected:', socket.id);
+  socket.join(`user:${socket.userId}`);
 
   socket.emit('dashboard:update', {
     totals: {

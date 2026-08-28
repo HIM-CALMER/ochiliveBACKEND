@@ -1,5 +1,7 @@
 const { findByEmail } = require('../services/userStore');
 const { listNotifications, markNotificationRead, markAllNotificationsRead } = require('../services/notificationStore');
+const { initializeTransaction, verifyTransaction } = require('../services/paystackService');
+const { getWallet, creditWallet } = require('../services/walletStore');
 
 const getDashboardSummary = async (req, res) => {
   return res.json({
@@ -31,16 +33,32 @@ const getDiscoverItems = async (req, res) => {
 };
 
 const getWalletSummary = async (req, res) => {
-  return res.json({
-    balance: 12480,
-    pendingPayouts: 3860,
-    lifetimeEarnings: 49830,
-    recentTransactions: [
-      { id: 'txn_01', description: 'Ticket sales', amount: 560, date: 'Today' },
-      { id: 'txn_02', description: 'Super chat', amount: 230, date: 'Yesterday' },
-      { id: 'txn_03', description: 'Revenue share', amount: 170, date: '2 days ago' },
-    ],
-  });
+  return res.json(await getWallet(req.user.id));
+};
+
+const initializeWalletFunding = async (req, res) => {
+  const amount = Number(req.body?.amount);
+  if (!Number.isFinite(amount) || amount < 100) return res.status(400).json({ message: 'Enter an amount of at least 100.' });
+  if (!req.user.email) return res.status(400).json({ message: 'A verified email is required to add funds.' });
+  try {
+    const transaction = await initializeTransaction({ amount: Math.round(amount * 100), email: req.user.email, currency: req.body?.currency || 'NGN', callback_url: process.env.PAYSTACK_CALLBACK_URL || 'http://localhost:5173/wallet', metadata: { userId: req.user.id, purpose: 'wallet_funding' } });
+    return res.json({ authorizationUrl: transaction.authorization_url, reference: transaction.reference });
+  } catch (error) {
+    return res.status(503).json({ message: error.message || 'Unable to start payment.' });
+  }
+};
+
+const verifyWalletFunding = async (req, res) => {
+  const reference = String(req.query?.reference || '').trim();
+  if (!reference) return res.status(400).json({ message: 'Payment reference is required.' });
+  try {
+    const transaction = await verifyTransaction(reference);
+    if (transaction.status !== 'success' || transaction.metadata?.userId !== req.user.id) return res.status(400).json({ message: 'Payment could not be verified.' });
+    const wallet = await creditWallet(req.user.id, Number(transaction.amount) / 100, reference, transaction.currency || 'NGN', { paystackId: transaction.id, channel: transaction.channel });
+    return res.json({ message: 'Funds added successfully.', wallet });
+  } catch (error) {
+    return res.status(400).json({ message: error.message || 'Payment could not be verified.' });
+  }
 };
 
 const getProfileSummary = async (req, res) => {
@@ -129,6 +147,8 @@ module.exports = {
   getDashboardSummary,
   getDiscoverItems,
   getWalletSummary,
+  initializeWalletFunding,
+  verifyWalletFunding,
   getProfileSummary,
   getNotifications,
   readNotification,

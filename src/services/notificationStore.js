@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Notification = require('../models/Notification');
+const { emitToUser } = require('./realtime');
 
 const memoryNotifications = [];
 const isMongoReady = () => mongoose.connection.readyState === 1;
@@ -9,14 +10,19 @@ const createNotification = async (notification) => {
   if (!isMongoReady()) {
     const entry = { ...notification, id: `notification_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, createdAt: new Date(), readAt: null };
     memoryNotifications.unshift(entry);
+    emitToUser(entry.recipientId, 'notification:new', entry);
     return entry;
   }
   try {
-    return (await Notification.create(notification)).toObject();
+    const created = (await Notification.create(notification)).toObject();
+    const entry = { ...created, id: created._id.toString() };
+    emitToUser(entry.recipientId, 'notification:new', entry);
+    return entry;
   } catch (error) {
     console.warn('Unable to persist notification, falling back to memory store:', error.message);
     const entry = { ...notification, id: `notification_${Date.now()}`, createdAt: new Date(), readAt: null };
     memoryNotifications.unshift(entry);
+    emitToUser(entry.recipientId, 'notification:new', entry);
     return entry;
   }
 };

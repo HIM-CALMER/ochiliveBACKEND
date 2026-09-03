@@ -3,6 +3,7 @@ const { registerUser, loginUser, verifyOtp, sendTestEmail, checkUsernameAvailabi
 const authenticate = require('../middleware/authGuard');
 const dashboardRoutes = require('./dashboardRoutes');
 const videoRoutes = require('./videoRoutes');
+const messageRoutes = require('./messageRoutes');
 const profileController = require('../controllers/profileController');
 const profilePictureUpload = require('multer')({ dest: require('path').join(__dirname, '../uploads') });
 const router = express.Router();
@@ -24,6 +25,7 @@ router.get('/profile', authenticate, (req, res) => {
 
 router.use('/dashboard', dashboardRoutes);
 router.use('/videos', videoRoutes);
+router.use('/messages', messageRoutes);
 router.get('/search/profiles', authenticate, profileController.searchProfiles);
 router.get('/profiles/:username', authenticate, profileController.getProfile);
 router.get('/profiles/:username/posts', authenticate, profileController.getPosts);

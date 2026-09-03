@@ -72,9 +72,9 @@ const searchUsers = async (query, limit = 12) => {
   try {
     return await User.find({
       $or: [
-        { username: regex },
-        { name: regex },
-        { email: regex },
+        { username: { $regex: safeQuery, $options: 'i' } },
+        { name: { $regex: safeQuery, $options: 'i' } },
+        { email: { $regex: safeQuery, $options: 'i' } },
       ],
     }).limit(limit).lean();
   } catch (error) {

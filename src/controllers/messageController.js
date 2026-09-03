@@ -167,28 +167,44 @@ exports.getConversations = async (req, res) => {
     }
 
     // Format conversations for frontend
-    const formattedConversations = conversations.map((conv) => {
+    const formattedConversations = await Promise.all(conversations.map(async (conv) => {
       const isUser1 = conv.participants.user1Id === userId;
-      const otherUser = isUser1 ? conv.participants.user2 : conv.participants.user1;
       const inboxType = isUser1 ? conv.inboxTypes.for_user1 : conv.inboxTypes.for_user2;
       const isAccepted = isUser1 ? conv.isAccepted.by_user1 : conv.isAccepted.by_user2;
+      const otherUser = isUser1
+        ? {
+            id: conv.participants.user2Id,
+            name: conv.participants.user2Name,
+            username: conv.participants.user2Username,
+            profilePictureUrl: conv.participants.user2ProfilePictureUrl,
+            accountType: conv.participants.user2AccountType,
+          }
+        : {
+            id: conv.participants.user1Id,
+            name: conv.participants.user1Name,
+            username: conv.participants.user1Username,
+            profilePictureUrl: conv.participants.user1ProfilePictureUrl,
+            accountType: conv.participants.user1AccountType,
+          };
+
+      const unreadCount = await Message.countDocuments({
+        conversationId: conv.conversationId,
+        receiverId: userId,
+        isRead: false,
+      });
 
       return {
         conversationId: conv.conversationId,
-        otherUser: {
-          id: otherUser.Id || (isUser1 ? conv.participants.user2Id : conv.participants.user1Id),
-          name: otherUser.Name || (isUser1 ? conv.participants.user2Name : conv.participants.user1Name),
-          username: otherUser.Username || (isUser1 ? conv.participants.user2Username : conv.participants.user1Username),
-          profilePictureUrl: otherUser.ProfilePictureUrl || (isUser1 ? conv.participants.user2ProfilePictureUrl : conv.participants.user1ProfilePictureUrl),
-          accountType: otherUser.AccountType || (isUser1 ? conv.participants.user2AccountType : conv.participants.user1AccountType),
-        },
+        otherUser,
         lastMessage: conv.lastMessage,
         lastMessageTime: conv.lastMessageTime,
         lastMessageSenderId: conv.lastMessageSenderId,
         inboxType,
         isAccepted,
+        unreadCount,
+        isUnread: unreadCount > 0,
       };
-    });
+    }));
 
     res.status(200).json({
       success: true,

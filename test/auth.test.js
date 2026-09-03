@@ -142,6 +142,29 @@ test('searchProfiles matches by username and name from the backend user store', 
   assert.ok(usernameSearchRes.body.results.some((user) => user.username === 'ayo_mide'));
 });
 
+test('searchProfiles normalizes handles, names, and result ranking', async () => {
+  await createUser({
+    id: 'search-user-3',
+    name: 'Ada Lovelace',
+    email: 'ada@example.com',
+    username: 'ada_lovelace',
+    password: 'hashed-password',
+    profilePictureUrl: '',
+    bio: 'Creator.',
+    accountType: 'creator',
+    followerIds: [],
+    followingIds: [],
+  });
+
+  const req = { user: { id: 'viewer-3' }, query: { q: '@ada_love' } };
+  const res = createRes();
+
+  await searchProfiles(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.results[0].username, 'ada_lovelace');
+});
+
 test('profile posts stay available in the in-memory fallback without MongoDB', async () => {
   const { uploadVideoPost } = require('../src/controllers/videoController');
   const { clearVideoStore } = require('../src/services/videoStore');

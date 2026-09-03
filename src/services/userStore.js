@@ -9,6 +9,15 @@ const passwordResets = new Map();
 
 const isMongoReady = () => mongoose.connection.readyState === 1 && typeof User !== 'undefined';
 
+const normalizeSearchText = (value) => String(value || '')
+  .normalize('NFKD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/^@+/, '')
+  .replace(/[_-]+/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
 const findByEmail = async (email) => {
   if (!isMongoReady()) {
     return memoryUsers.find((user) => user.email === email) || null;
@@ -58,29 +67,53 @@ const findByUsername = async (username) => {
 };
 
 const searchUsers = async (query, limit = 12) => {
-  const normalized = String(query || '').trim();
+  const normalized = normalizeSearchText(query);
   if (!normalized) return [];
-  const safeQuery = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(safeQuery, 'i');
+  const terms = normalized.split(' ').filter(Boolean);
+  const safeTerms = terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const regexes = safeTerms.map((term) => new RegExp(term, 'i'));
+  const matchesUser = (user) => {
+    const username = normalizeSearchText(user.username);
+    const name = normalizeSearchText(user.name);
+    const email = normalizeSearchText(user.email);
+    const searchable = `${username} ${name} ${email}`;
+    return regexes.every((regex) => regex.test(searchable));
+  };
+  const scoreUser = (user) => {
+    const username = normalizeSearchText(user.username);
+    const name = normalizeSearchText(user.name);
+    if (username === normalized) return 0;
+    if (username.startsWith(normalized)) return 1;
+    if (name === normalized) return 2;
+    if (name.startsWith(normalized)) return 3;
+    return 4;
+  };
 
   if (!isMongoReady()) {
     return memoryUsers
-      .filter((user) => regex.test(user.username) || regex.test(user.name) || regex.test(user.email))
+      .filter(matchesUser)
+      .sort((first, second) => scoreUser(first) - scoreUser(second))
       .slice(0, limit);
   }
 
   try {
     return await User.find({
-      $or: [
-        { username: { $regex: safeQuery, $options: 'i' } },
-        { name: { $regex: safeQuery, $options: 'i' } },
-        { email: { $regex: safeQuery, $options: 'i' } },
-      ],
-    }).limit(limit).lean();
+      $and: safeTerms.map((term) => ({
+        $or: [
+          { username: { $regex: term, $options: 'i' } },
+          { name: { $regex: term, $options: 'i' } },
+          { email: { $regex: term, $options: 'i' } },
+        ],
+      })),
+    }).limit(Math.max(limit, 50)).lean().then((users) => users
+      .filter(matchesUser)
+      .sort((first, second) => scoreUser(first) - scoreUser(second))
+      .slice(0, limit));
   } catch (error) {
     console.warn('MongoDB unavailable for searchUsers, falling back to memory store:', error.message);
     return memoryUsers
-      .filter((user) => regex.test(user.username) || regex.test(user.name) || regex.test(user.email))
+      .filter(matchesUser)
+      .sort((first, second) => scoreUser(first) - scoreUser(second))
       .slice(0, limit);
   }
 };

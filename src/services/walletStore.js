@@ -26,8 +26,9 @@ const creditWallet = async (userId, amount, reference, currency = 'NGN', metadat
   if (!isMongoReady()) {
     const wallet = getMemoryWallet(userId);
     if (wallet.recentTransactions.some((transaction) => transaction.reference === reference)) return wallet;
+    const createdAt = new Date();
     wallet.availableBalance += amount;
-    wallet.recentTransactions.unshift({ id: `txn_${Date.now()}`, reference, date: new Date().toISOString(), event: 'Funds added', source: 'Paystack', gross: amount, commission: 0, net: amount, status: 'settled' });
+    wallet.recentTransactions.unshift({ id: `txn_${Date.now()}`, reference, type: 'funding', amount, currency, status: 'settled', createdAt, date: createdAt.toISOString(), event: 'Funds added', source: 'Paystack', gross: amount, commission: 0, net: amount });
     wallet.recentTransactions = wallet.recentTransactions.slice(0, 50);
     return wallet;
   }

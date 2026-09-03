@@ -41,7 +41,8 @@ const initializeWalletFunding = async (req, res) => {
   if (!Number.isFinite(amount) || amount < 100) return res.status(400).json({ message: 'Enter an amount of at least 100.' });
   if (!req.user.email) return res.status(400).json({ message: 'A verified email is required to add funds.' });
   try {
-    const transaction = await initializeTransaction({ amount: Math.round(amount * 100), email: req.user.email, currency: req.body?.currency || 'NGN', callback_url: process.env.PAYSTACK_CALLBACK_URL || 'http://localhost:5173/wallet', metadata: { userId: req.user.id, purpose: 'wallet_funding' } });
+    const frontendUrl = String(process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+    const transaction = await initializeTransaction({ amount: Math.round(amount * 100), email: req.user.email, currency: req.body?.currency || 'NGN', callback_url: process.env.PAYSTACK_CALLBACK_URL || `${frontendUrl}/wallet`, metadata: { userId: req.user.id, purpose: 'wallet_funding' } });
     return res.json({ authorizationUrl: transaction.authorization_url, reference: transaction.reference });
   } catch (error) {
     return res.status(503).json({ message: error.message || 'Unable to start payment.' });
@@ -53,7 +54,8 @@ const verifyWalletFunding = async (req, res) => {
   if (!reference) return res.status(400).json({ message: 'Payment reference is required.' });
   try {
     const transaction = await verifyTransaction(reference);
-    if (transaction.status !== 'success' || transaction.metadata?.userId !== req.user.id) return res.status(400).json({ message: 'Payment could not be verified.' });
+    const metadataUserId = transaction.metadata?.userId || transaction.metadata?.user_id;
+    if (transaction.status !== 'success' || String(metadataUserId || '') !== String(req.user.id)) return res.status(400).json({ message: 'Payment could not be verified.' });
     const wallet = await creditWallet(req.user.id, Number(transaction.amount) / 100, reference, transaction.currency || 'NGN', { paystackId: transaction.id, channel: transaction.channel });
     return res.json({ message: 'Funds added successfully.', wallet });
   } catch (error) {
@@ -116,12 +118,67 @@ const readAllNotifications = async (req, res) => {
 };
 
 const getActivityFeed = async (req, res) => {
-  return res.json([
-    { id: 'act_1', title: 'A new highlight reel published', time: '3m ago', detail: 'Your latest live set just hit 3.2k views.' },
-    { id: 'act_2', title: 'New followers acquired', time: '18m ago', detail: '24 new fans joined after last broadcast.' },
-    { id: 'act_3', title: 'Trending tag unlocked', time: '45m ago', detail: 'Your show is now trending under #LateNight.' },
-    { id: 'act_4', title: 'Wallet update', time: '1h ago', detail: 'Pending payout has been validated and queued.' },
-  ]);
+  const wallet = await getWallet(req.user.id);
+  const notifications = await listNotifications(req.user.id);
+  const notificationTitles = {
+    like: 'Video liked',
+    comment: 'New comment',
+    save: 'Video saved',
+    follow: 'New follower',
+    'follow-back': 'Followed back',
+    reshare: 'Post reshared',
+    mention: 'Mentioned in a post',
+  };
+  const notificationActivity = notifications.map((notification) => ({
+    id: notification.id || notification._id?.toString(),
+    title: notificationTitles[notification.type] || 'Social activity',
+    category: 'Social',
+    time: new Date(notification.createdAt).toLocaleString(),
+    occurredAt: notification.createdAt,
+    detail: notification.type === 'comment'
+      ? `${notification.actorName || notification.actorUsername} said: “${notification.comment}”`
+      : `${notification.actorName || notification.actorUsername} ${notification.type === 'follow' ? 'started following you.' : notification.type === 'like' ? 'liked your video.' : notification.type === 'save' ? 'saved your video.' : notification.type === 'reshare' ? 'reshared your post.' : 'interacted with your content.'}`,
+    notification: {
+      type: notification.type,
+      unread: !notification.readAt,
+      actorUsername: notification.actorUsername || '',
+    },
+  }));
+  const walletActivity = (wallet.recentTransactions || []).map((transaction) => {
+    const type = transaction.type || (transaction.event === 'Funds added' ? 'funding' : 'wallet');
+    const amount = Number(transaction.amount ?? transaction.net ?? transaction.gross ?? 0);
+    const currency = transaction.currency || wallet.currency || 'NGN';
+    const status = transaction.status || 'settled';
+    const labels = {
+      funding: 'Wallet funded',
+      withdrawal: 'Withdrawal update',
+      earning: 'Creator earnings received',
+      refund: 'Wallet refund issued',
+      'gift-purchase': 'Gift purchase',
+      'gift-tip': 'Gift tip sent',
+    };
+
+    return {
+      id: transaction.id || transaction._id?.toString() || transaction.reference,
+      title: labels[type] || 'Wallet transaction',
+      category: 'Wallet',
+      time: new Date(transaction.createdAt || transaction.date || Date.now()).toLocaleString(),
+      occurredAt: transaction.createdAt || transaction.date,
+      detail: `${currency} ${amount.toLocaleString()} ${status}. ${transaction.source || 'Wallet ledger'}.`,
+      wallet: {
+        reference: transaction.reference,
+        type,
+        amount,
+        currency,
+        status,
+        source: transaction.source || '',
+      },
+    };
+  });
+
+  return res.json([...notificationActivity, ...walletActivity].sort((first, second) => (
+    new Date(second.occurredAt || 0).getTime() - new Date(first.occurredAt || 0).getTime()
+  )));
 };
 
 const uploadAsset = async (req, res) => {

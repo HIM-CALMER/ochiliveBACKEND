@@ -42,7 +42,9 @@ const initializeWalletFunding = async (req, res) => {
   if (!req.user.email) return res.status(400).json({ message: 'A verified email is required to add funds.' });
   try {
     const frontendUrl = String(process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
-    const transaction = await initializeTransaction({ amount: Math.round(amount * 100), email: req.user.email, currency: req.body?.currency || 'NGN', callback_url: process.env.PAYSTACK_CALLBACK_URL || `${frontendUrl}/wallet`, metadata: { userId: req.user.id, purpose: 'wallet_funding' } });
+    const requestedCallback = String(req.body?.callbackUrl || '').trim();
+    const callbackUrl = requestedCallback.startsWith(`${frontendUrl}/`) ? requestedCallback : (process.env.PAYSTACK_CALLBACK_URL || `${frontendUrl}/wallet`);
+    const transaction = await initializeTransaction({ amount: Math.round(amount * 100), email: req.user.email, currency: req.body?.currency || 'NGN', callback_url: callbackUrl, metadata: { userId: req.user.id, purpose: 'wallet_funding' } });
     return res.json({ authorizationUrl: transaction.authorization_url, reference: transaction.reference });
   } catch (error) {
     return res.status(503).json({ message: error.message || 'Unable to start payment.' });

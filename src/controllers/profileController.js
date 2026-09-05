@@ -6,6 +6,7 @@ const { findByUsername, searchUsers, updateById, updateRelationships, usernameEx
 const { countVideosByCreator, listVideosByCreator } = require('../services/videoStore');
 const { getUsernameValidation, normalizeUsername } = require('../utils/usernamePolicy');
 const { createNotification } = require('../services/notificationStore');
+const { getComedianAccess } = require('../config/comedianLevels');
 
 const isMongoReady = () => mongoose.connection.readyState === 1 && typeof Video !== 'undefined';
 
@@ -16,7 +17,10 @@ const publicUser = (user) => ({
   bio: user.bio || '',
   profilePictureUrl: user.profilePictureUrl || '',
   accountType: user.accountType || 'creator',
-  comedyProfile: user.comedyProfile || null,
+  comedyProfile: user.accountType === 'comedian' ? {
+    ...(user.comedyProfile || {}),
+    ...getComedianAccess(user.comedyProfile),
+  } : null,
 });
 
 const profilePayload = (user, viewerId) => ({
@@ -93,6 +97,15 @@ const completeComedyOnboarding = async (req, res) => {
   const updated = await updateById(req.user.id, {
     accountType: 'comedian',
     comedyProfile: {
+      level: 1,
+      levelName: 'Rookie',
+      rating: null,
+      ratingCount: 0,
+      totalLiveMinutes: 0,
+      monthlyLiveStreams: 0,
+      completedLiveStreams: 0,
+      ticketPublishingEnabled: false,
+      pricingMode: 'free',
       comedyStyle: comedyStyle.trim(),
       experience: experience.trim(),
       influences: influences.trim(),

@@ -61,7 +61,7 @@ const getFollowingVideos = async (userId) => {
 
 const getRecentLiveRooms = async () => {
   const liveRooms = isMongoReady()
-    ? await LiveRoom.find({ status: 'live' }).sort({ startedAt: -1 }).lean().limit(20)
+    ? await LiveRoom.find({ status: 'live', $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] }).sort({ startedAt: -1 }).lean().limit(20)
     : [];
 
   const mapped = await Promise.all((liveRooms || []).map(async (room) => {

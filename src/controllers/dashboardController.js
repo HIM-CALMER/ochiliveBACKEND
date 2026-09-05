@@ -2,6 +2,7 @@ const { findByEmail } = require('../services/userStore');
 const { listNotifications, markNotificationRead, markAllNotificationsRead } = require('../services/notificationStore');
 const { initializeTransaction, verifyTransaction } = require('../services/paystackService');
 const { getWallet, creditWallet } = require('../services/walletStore');
+const { getComedianAccess } = require('../config/comedianLevels');
 
 const getDashboardSummary = async (req, res) => {
   return res.json({
@@ -42,8 +43,8 @@ const initializeWalletFunding = async (req, res) => {
   if (!req.user.email) return res.status(400).json({ message: 'A verified email is required to add funds.' });
   try {
     const frontendUrl = String(process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
-    const requestedCallback = String(req.body?.callbackUrl || '').trim();
-    const callbackUrl = requestedCallback.startsWith(`${frontendUrl}/`) ? requestedCallback : (process.env.PAYSTACK_CALLBACK_URL || `${frontendUrl}/wallet`);
+    const backendUrl = String(process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+    const callbackUrl = `${backendUrl}/api/dashboard/wallet/fund/callback`;
     const transaction = await initializeTransaction({ amount: Math.round(amount * 100), email: req.user.email, currency: req.body?.currency || 'NGN', callback_url: callbackUrl, metadata: { userId: req.user.id, purpose: 'wallet_funding' } });
     return res.json({ authorizationUrl: transaction.authorization_url, reference: transaction.reference });
   } catch (error) {
@@ -65,6 +66,18 @@ const verifyWalletFunding = async (req, res) => {
   }
 };
 
+const walletFundingCallback = (req, res) => {
+  const frontendUrl = String(process.env.FRONTEND_URL || '').replace(/\/$/, '');
+  if (!frontendUrl) return res.status(500).send('FRONTEND_URL is not configured.');
+
+  const redirectUrl = new URL(`${frontendUrl}/wallet`);
+  const reference = String(req.query?.reference || req.query?.trxref || '').trim();
+  const status = String(req.query?.status || '').trim();
+  if (reference) redirectUrl.searchParams.set('reference', reference);
+  if (status) redirectUrl.searchParams.set('status', status);
+  return res.redirect(302, redirectUrl.toString());
+};
+
 const getProfileSummary = async (req, res) => {
   const user = req.user || {};
   const storedUser = user.email ? await findByEmail(user.email) : null;
@@ -82,6 +95,11 @@ const getProfileSummary = async (req, res) => {
       bio: 'Live creator focused on premium events, audience engagement, and insightful broadcasts.',
       location: 'Remote',
       tier: 'Creator Pro',
+      accountType: profileUser.accountType || 'creator',
+      comedyProfile: profileUser.accountType === 'comedian' ? {
+        ...(profileUser.comedyProfile || {}),
+        ...getComedianAccess(profileUser.comedyProfile),
+      } : null,
     },
     stats: {
       followers: followerIds.length,
@@ -208,6 +226,7 @@ module.exports = {
   getWalletSummary,
   initializeWalletFunding,
   verifyWalletFunding,
+  walletFundingCallback,
   getProfileSummary,
   getNotifications,
   readNotification,

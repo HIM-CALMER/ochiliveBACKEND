@@ -6,6 +6,7 @@ const {
   getWalletSummary,
   initializeWalletFunding,
   verifyWalletFunding,
+  walletFundingCallback,
   getProfileSummary,
   getNotifications,
   readNotification,
@@ -19,6 +20,7 @@ const router = express.Router();
 router.get('/summary', authenticate, getDashboardSummary);
 router.get('/discover', authenticate, getDiscoverItems);
 router.get('/wallet', authenticate, getWalletSummary);
+router.get('/wallet/fund/callback', walletFundingCallback);
 router.post('/wallet/fund/initialize', authenticate, initializeWalletFunding);
 router.get('/wallet/fund/verify', authenticate, verifyWalletFunding);
 router.get('/profile', authenticate, getProfileSummary);

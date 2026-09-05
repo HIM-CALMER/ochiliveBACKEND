@@ -10,6 +10,10 @@ const liveRoomSchema = new mongoose.Schema({
   status: { type: String, enum: ['draft', 'ready', 'live', 'ended'], default: 'draft' },
   startedAt: { type: Date, default: null },
   endedAt: { type: Date, default: null },
+  expiresAt: { type: Date, default: null, index: true },
+  maxDurationMinutes: { type: Number, default: null, min: 1 },
+  ticketPublishingEnabled: { type: Boolean, default: false },
+  pricingMode: { type: String, enum: ['free', 'paid'], default: 'free' },
   viewerCount: { type: Number, default: 0 },
 }, { timestamps: true });
 

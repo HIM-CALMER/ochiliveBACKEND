@@ -1,6 +1,18 @@
 const LiveRoom = require('../models/LiveRoom');
+const { getComedianAccess } = require('../config/comedianLevels');
 const memoryRooms = [];
 const isMongoReady = () => Boolean(process.env.MONGO_URI);
+
+const getMonthStart = () => {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+};
+
+const countMonthlyStreams = async (hostId) => {
+  const monthStart = getMonthStart();
+  if (isMongoReady()) return LiveRoom.countDocuments({ hostId, startedAt: { $gte: monthStart } });
+  return memoryRooms.filter((room) => room.hostId === hostId && room.startedAt && new Date(room.startedAt) >= monthStart).length;
+};
 
 const createRoom = async (req, res) => {
   const { title, description, format, visibility } = req.body || {};
@@ -14,7 +26,22 @@ const createRoom = async (req, res) => {
       format: format || 'standup',
       visibility: visibility || 'public',
       status: 'ready',
+      maxDurationMinutes: null,
+      expiresAt: null,
+      ticketPublishingEnabled: false,
+      pricingMode: 'free',
   };
+  const access = getComedianAccess(req.user.comedyProfile);
+  const monthlyStreams = await countMonthlyStreams(req.user.id);
+  if (monthlyStreams >= access.monthlyStreamLimit) {
+    return res.status(403).json({
+      code: 'MONTHLY_STREAM_LIMIT_REACHED',
+      message: `You have used all ${access.monthlyStreamLimit} live streams available for Level ${access.level} this month.`,
+    });
+  }
+  payload.maxDurationMinutes = access.maxStreamMinutes;
+  payload.ticketPublishingEnabled = access.ticketPublishingEnabled;
+  payload.pricingMode = access.pricingMode;
   try {
     const room = isMongoReady() ? await LiveRoom.create(payload) : payload;
     if (!isMongoReady()) memoryRooms.push(room);
@@ -26,13 +53,21 @@ const createRoom = async (req, res) => {
 
 const startRoom = async (req, res) => {
   try {
+    const access = getComedianAccess(req.user.comedyProfile);
+    const monthlyStreams = await countMonthlyStreams(req.user.id);
+    if (monthlyStreams >= access.monthlyStreamLimit) {
+      return res.status(403).json({
+        code: 'MONTHLY_STREAM_LIMIT_REACHED',
+        message: `You have used all ${access.monthlyStreamLimit} live streams available for Level ${access.level} this month.`,
+      });
+    }
     const room = isMongoReady() ? await LiveRoom.findOneAndUpdate(
       { id: req.params.id, hostId: req.user.id, status: 'ready' },
-      { $set: { status: 'live', startedAt: new Date() } },
+      { $set: { status: 'live', startedAt: new Date(), expiresAt: new Date(Date.now() + access.maxStreamMinutes * 60 * 1000) } },
       { new: true, lean: true },
     ) : (() => {
       const item = memoryRooms.find((candidate) => candidate.id === req.params.id && candidate.hostId === req.user.id && candidate.status === 'ready');
-      if (item) Object.assign(item, { status: 'live', startedAt: new Date() });
+      if (item) Object.assign(item, { status: 'live', startedAt: new Date(), expiresAt: new Date(Date.now() + access.maxStreamMinutes * 60 * 1000) });
       return item;
     })();
     if (!room) return res.status(404).json({ message: 'Live room is not ready to start.' });

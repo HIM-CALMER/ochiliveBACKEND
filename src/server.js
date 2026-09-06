@@ -153,5 +153,4 @@ const startServer = (port) => {
   });
 };
 
-connectDB();
-startServer(PORT);
+connectDB().finally(() => startServer(PORT));

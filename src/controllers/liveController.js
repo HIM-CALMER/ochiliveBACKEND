@@ -1,8 +1,9 @@
+const mongoose = require('mongoose');
 const LiveRoom = require('../models/LiveRoom');
 const { getComedianAccess } = require('../config/comedianLevels');
 const { findById, updateById } = require('../services/userStore');
 const memoryRooms = [];
-const isMongoReady = () => Boolean(process.env.MONGO_URI);
+const isMongoReady = () => mongoose.connection.readyState === 1;
 
 const getMonthStart = () => {
   const now = new Date();
@@ -48,6 +49,7 @@ const createRoom = async (req, res) => {
     if (!isMongoReady()) memoryRooms.push(room);
     return res.status(201).json({ room });
   } catch (error) {
+    console.error('Unable to prepare live room:', error.message);
     return res.status(500).json({ message: 'Unable to prepare the live room.' });
   }
 };
@@ -74,6 +76,7 @@ const startRoom = async (req, res) => {
     if (!room) return res.status(404).json({ message: 'Live room is not ready to start.' });
     return res.status(200).json({ room, message: 'Live room started.' });
   } catch (error) {
+    console.error('Unable to start live room:', error.message);
     return res.status(500).json({ message: 'Unable to start the live room.' });
   }
 };
@@ -116,6 +119,7 @@ const endRoom = async (req, res) => {
     }
     return res.json({ room: completedRoom, durationMinutes: elapsedMinutes, message: 'Live room ended.' });
   } catch (error) {
+    console.error('Unable to end live room:', error.message);
     return res.status(500).json({ message: 'Unable to end the live room.' });
   }
 };

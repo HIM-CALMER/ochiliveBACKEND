@@ -35,5 +35,6 @@ router.post('/profile/me/picture', authenticate, profilePictureUpload.single('pi
 router.post('/profile/me/comedy-onboarding', authenticate, profileController.completeComedyOnboarding);
 router.post('/profiles/:username/follow', authenticate, profileController.followProfile);
 router.delete('/profiles/:username/follow', authenticate, profileController.unfollowProfile);
+router.post('/profiles/:username/rating', authenticate, profileController.rateProfile);
 
 module.exports = router;

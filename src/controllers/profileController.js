@@ -7,6 +7,7 @@ const { countVideosByCreator, listVideosByCreator } = require('../services/video
 const { getUsernameValidation, normalizeUsername } = require('../utils/usernamePolicy');
 const { createNotification } = require('../services/notificationStore');
 const { getComedianAccess } = require('../config/comedianLevels');
+const { summarizeRatings, upsertRating } = require('../services/ratingStore');
 
 const isMongoReady = () => mongoose.connection.readyState === 1 && typeof Video !== 'undefined';
 
@@ -47,7 +48,24 @@ const getProfile = async (req, res) => {
   } else {
     payload.stats.posts = await countVideosByCreator(user.id);
   }
+  if (user.accountType === 'comedian') {
+    payload.user.comedyProfile = { ...payload.user.comedyProfile, ...(await summarizeRatings(user.id)) };
+  }
   return res.json(payload);
+};
+
+const rateProfile = async (req, res) => {
+  const target = await findByUsername(req.params.username);
+  const score = Number(req.body?.score);
+  if (!target) return res.status(404).json({ message: 'Profile not found.' });
+  if (target.accountType !== 'comedian') return res.status(400).json({ message: 'Only comedian profiles can be rated.' });
+  if (target.id === req.user.id) return res.status(400).json({ message: 'You cannot rate your own profile.' });
+  if (!Number.isInteger(score) || score < 1 || score > 5) return res.status(400).json({ message: 'Rating must be a whole number from 1 to 5.' });
+
+  await upsertRating(target.id, req.user.id, score);
+  const summary = await summarizeRatings(target.id);
+  await updateById(target.id, { comedyProfile: { ...(target.comedyProfile || {}), ...summary } });
+  return res.json({ rating: summary.rating, ratingCount: summary.ratingCount, message: 'Rating saved.' });
 };
 
 const updateProfile = async (req, res) => {
@@ -222,4 +240,4 @@ const getReshares = async (req, res) => {
   return res.json(reshares.map((item) => ({ ...formatPost(postMap.get(item.postId) || {}), resharedAt: item.createdAt })));
 };
 
-module.exports = { getProfile, updateProfile, updateProfilePicture, completeComedyOnboarding, followProfile, unfollowProfile, searchProfiles, getPosts, getReshares };
+module.exports = { getProfile, updateProfile, updateProfilePicture, completeComedyOnboarding, followProfile, unfollowProfile, rateProfile, searchProfiles, getPosts, getReshares };

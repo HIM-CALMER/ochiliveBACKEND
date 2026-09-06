@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const Module = require('module');
 const { registerUser, checkUsernameAvailability } = require('../src/controllers/authController');
 const { createUser } = require('../src/services/userStore');
-const { searchProfiles } = require('../src/controllers/profileController');
+const { searchProfiles, rateProfile } = require('../src/controllers/profileController');
 
 function createRes() {
   return {
@@ -163,6 +163,35 @@ test('searchProfiles normalizes handles, names, and result ranking', async () =>
 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.results[0].username, 'ada_lovelace');
+});
+
+test('other users can rate comedian profiles and update the aggregate', async () => {
+  await createUser({
+    id: 'comedian-rating-target',
+    name: 'Rating Comedian',
+    email: 'rating.comedian@example.com',
+    username: 'rating_comedian',
+    password: 'hashed-password',
+    accountType: 'comedian',
+    comedyProfile: { completedAt: new Date(), level: 1, levelName: 'Rookie' },
+    followerIds: [],
+    followingIds: [],
+  });
+
+  const firstRes = createRes();
+  await rateProfile({ params: { username: 'rating_comedian' }, user: { id: 'viewer-rating-1' }, body: { score: 5 } }, firstRes);
+  assert.equal(firstRes.statusCode, 200);
+  assert.equal(firstRes.body.rating, 5);
+  assert.equal(firstRes.body.ratingCount, 1);
+
+  const secondRes = createRes();
+  await rateProfile({ params: { username: 'rating_comedian' }, user: { id: 'viewer-rating-2' }, body: { score: 3 } }, secondRes);
+  assert.equal(secondRes.body.rating, 4);
+  assert.equal(secondRes.body.ratingCount, 2);
+
+  const selfRes = createRes();
+  await rateProfile({ params: { username: 'rating_comedian' }, user: { id: 'comedian-rating-target' }, body: { score: 5 } }, selfRes);
+  assert.equal(selfRes.statusCode, 400);
 });
 
 test('profile posts stay available in the in-memory fallback without MongoDB', async () => {

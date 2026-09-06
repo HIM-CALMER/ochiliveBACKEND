@@ -1,5 +1,6 @@
 const LiveRoom = require('../models/LiveRoom');
 const { getComedianAccess } = require('../config/comedianLevels');
+const { findById, updateById } = require('../services/userStore');
 const memoryRooms = [];
 const isMongoReady = () => Boolean(process.env.MONGO_URI);
 
@@ -77,4 +78,46 @@ const startRoom = async (req, res) => {
   }
 };
 
-module.exports = { createRoom, startRoom };
+const endRoom = async (req, res) => {
+  try {
+    const room = isMongoReady()
+      ? await LiveRoom.findOne({ id: req.params.id, hostId: req.user.id, status: 'live' }).lean()
+      : memoryRooms.find((candidate) => candidate.id === req.params.id && candidate.hostId === req.user.id && candidate.status === 'live');
+    if (!room) return res.status(404).json({ message: 'Live room is not active.' });
+
+    const endedAt = new Date();
+    const startedAt = new Date(room.startedAt);
+    const elapsedMinutes = Math.max(0, Math.min(
+      Math.ceil((endedAt.getTime() - startedAt.getTime()) / 60000),
+      room.maxDurationMinutes || Number.MAX_SAFE_INTEGER,
+    ));
+    const completedRoom = isMongoReady()
+      ? await LiveRoom.findOneAndUpdate(
+        { id: room.id, hostId: req.user.id, status: 'live' },
+        { $set: { status: 'ended', endedAt } },
+        { new: true, lean: true },
+      )
+      : (() => {
+        Object.assign(room, { status: 'ended', endedAt });
+        return room;
+      })();
+
+    if (!completedRoom) return res.status(409).json({ message: 'This live room has already ended.' });
+    const user = await findById(req.user.id);
+    if (user?.accountType === 'comedian') {
+      const comedyProfile = user.comedyProfile || {};
+      await updateById(req.user.id, {
+        comedyProfile: {
+          ...comedyProfile,
+          totalLiveMinutes: (comedyProfile.totalLiveMinutes || 0) + elapsedMinutes,
+          completedLiveStreams: (comedyProfile.completedLiveStreams || 0) + 1,
+        },
+      });
+    }
+    return res.json({ room: completedRoom, durationMinutes: elapsedMinutes, message: 'Live room ended.' });
+  } catch (error) {
+    return res.status(500).json({ message: 'Unable to end the live room.' });
+  }
+};
+
+module.exports = { createRoom, startRoom, endRoom };

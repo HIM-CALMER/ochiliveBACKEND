@@ -63,9 +63,9 @@ exports.registerUser = async (req, res) => {
     await sendOtpEmail(normalizedEmail, otp);
   } catch (error) {
     console.error(error.message);
-    return res.status(200).json({
+    return res.status(503).json({
       message: 'Verification email delivery could not be completed. Please request a new code or retry after the mail service is configured.',
-      pending: true,
+      pending: false,
       email: normalizedEmail,
       emailDeliveryFailed: true,
     });
@@ -75,6 +75,73 @@ exports.registerUser = async (req, res) => {
     message: 'Verification code sent. Please confirm the code to finish creating your account.',
     pending: true,
     email: normalizedEmail,
+  });
+};
+
+exports.googleSignIn = async (req, res) => {
+  const { name, email, picture } = req.body || {};
+  const normalizedEmail = String(email || '').toLowerCase().trim();
+
+  if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
+    return res.status(400).json({ message: 'Please provide a valid Google email address.' });
+  }
+
+  const existing = await findByEmail(normalizedEmail);
+  if (existing) {
+    if (picture || name) {
+      await updateById(existing.id, {
+        name: String(name || existing.name || existing.username || 'Google User').trim(),
+        profilePictureUrl: String(picture || existing.profilePictureUrl || '').trim(),
+      });
+    }
+
+    return res.status(200).json({
+      message: 'Welcome back via Google sign-in.',
+      token: createToken(existing),
+      user: sanitizeUser(existing),
+    });
+  }
+
+  const displayName = String(name || normalizedEmail.split('@')[0] || 'Google User').trim();
+  const baseUsername = normalizeUsername(String(name || normalizedEmail.split('@')[0] || 'google_user'));
+  const base = normalizeUsername(baseUsername || displayName || 'google_user');
+  const emailLocal = normalizeUsername(normalizedEmail.split('@')[0] || 'google_user');
+  const usernameSeed = base && getUsernameValidation(base).valid ? base : emailLocal;
+
+  let username = usernameSeed;
+  let counter = 1;
+  while (await usernameExists(username)) {
+    username = `${usernameSeed}_${counter}`;
+    counter += 1;
+  }
+
+  const newUser = {
+    id: `user_${Date.now()}`,
+    name: displayName,
+    email: normalizedEmail,
+    username: normalizeUsername(username),
+    password: 'google-oauth-bridge',
+    profilePictureUrl: String(picture || '').trim(),
+    bio: '',
+    accountType: 'creator',
+    comedyProfile: {},
+    followerIds: [],
+    followingIds: [],
+  };
+
+  try {
+    await createUser(newUser);
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ message: 'That Google email is already registered on another account.' });
+    }
+    return res.status(500).json({ message: 'Unable to create your account from Google sign-in.' });
+  }
+
+  return res.status(201).json({
+    message: 'Google account created successfully.',
+    token: createToken(newUser),
+    user: sanitizeUser(newUser),
   });
 };
 

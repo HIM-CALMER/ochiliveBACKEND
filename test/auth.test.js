@@ -44,16 +44,16 @@ test('registerUser rejects invalid email formats', async () => {
   assert.match(res.body.message, /email/i);
 });
 
-test('registerUser returns a pending verification response for valid signup data', async () => {
+test('registerUser returns an email delivery failure response instead of a fake pending OTP state', async () => {
   const req = { body: { name: 'OTP User', email: 'otp@example.com', username: 'otp_user', password: 'StrongPass123!' } };
   const res = createRes();
 
   await registerUser(req, res);
 
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.body.pending, true);
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.pending, false);
   assert.equal(res.body.email, 'otp@example.com');
-  assert.match(res.body.message, /verification/i);
+  assert.match(res.body.message, /delivery|configured|retry/i);
 });
 
 test('username availability rejects reserved names', async () => {

@@ -64,10 +64,9 @@ exports.registerUser = async (req, res) => {
   } catch (error) {
     console.error(error.message);
     return res.status(200).json({
-      message: 'Verification email delivery is delayed, but your signup is ready. Please use the verification code below to continue.',
+      message: 'Verification email delivery could not be completed. Please request a new code or retry after the mail service is configured.',
       pending: true,
       email: normalizedEmail,
-      otp,
       emailDeliveryFailed: true,
     });
   }
@@ -76,7 +75,6 @@ exports.registerUser = async (req, res) => {
     message: 'Verification code sent. Please confirm the code to finish creating your account.',
     pending: true,
     email: normalizedEmail,
-    otp,
   });
 };
 

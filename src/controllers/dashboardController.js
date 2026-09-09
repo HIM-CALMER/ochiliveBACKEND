@@ -77,9 +77,10 @@ const walletFundingCallback = (req, res) => {
 
   const redirectUrl = new URL(`${frontendUrl}/wallet`);
   const reference = String(req.query?.reference || req.query?.trxref || '').trim();
-  const status = String(req.query?.status || '').trim();
+  const status = String(req.query?.status || req.query?.message || '').trim();
   if (reference) redirectUrl.searchParams.set('reference', reference);
-  if (status) redirectUrl.searchParams.set('status', status);
+  if (status && !['success','ok','paid'].includes(status.toLowerCase())) redirectUrl.searchParams.set('status', status);
+  if (!status) redirectUrl.searchParams.set('status', 'success');
   return res.redirect(302, redirectUrl.toString());
 };
 

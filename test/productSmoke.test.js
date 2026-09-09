@@ -9,7 +9,7 @@ const path = require('path');
 const API_BASE = 'http://127.0.0.1:5000/api';
 
 const makeUniqueEmail = () => `product-smoke-${Date.now()}-${Math.round(Math.random() * 999999)}@example.com`;
-const makeUniqueUsername = () => `product_smoke_${Math.round(Math.random() * 9999)}`;
+const makeUniqueUsername = () => `smoke_${Math.round(Math.random() * 99999)}_${String(Date.now()).slice(-6)}`;
 
 async function registerAndVerify(email, username, password = 'StrongPass123!') {
   const registerResponse = await sendRequest('/auth/register', 'POST', {

@@ -42,10 +42,15 @@ const initializeWalletFunding = async (req, res) => {
   if (!Number.isFinite(amount) || amount < 100) return res.status(400).json({ message: 'Enter an amount of at least 100.' });
   if (!req.user.email) return res.status(400).json({ message: 'A verified email is required to add funds.' });
   try {
-    const frontendUrl = String(process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
     const backendUrl = String(process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
     const callbackUrl = `${backendUrl}/api/dashboard/wallet/fund/callback`;
-    const transaction = await initializeTransaction({ amount: Math.round(amount * 100), email: req.user.email, currency: req.body?.currency || 'NGN', callback_url: callbackUrl, metadata: { userId: req.user.id, purpose: 'wallet_funding' } });
+    const transaction = await initializeTransaction({
+      amount: Math.round(amount * 100),
+      email: req.user.email,
+      currency: req.body?.currency || 'NGN',
+      callback_url: callbackUrl,
+      metadata: { userId: req.user.id, purpose: 'wallet_funding' },
+    });
     return res.json({ authorizationUrl: transaction.authorization_url, reference: transaction.reference });
   } catch (error) {
     return res.status(503).json({ message: error.message || 'Unable to start payment.' });

@@ -20,6 +20,7 @@ const videoSchema = new mongoose.Schema(
       createdAt: { type: Date, default: Date.now },
     }],
     type: { type: String, enum: ['video', 'photo'], default: 'video' },
+    visibility: { type: String, enum: ['public', 'followers', 'private'], default: 'public' },
     status: { type: String, enum: ['published', 'queued', 'draft'], default: 'published' },
   },
   {

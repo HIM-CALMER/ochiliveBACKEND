@@ -24,6 +24,7 @@ const normalizeVideo = (video = {}) => {
     likedBy: Array.isArray(video.likedBy) ? video.likedBy.map(String) : [],
     commentThread: Array.isArray(video.commentThread) ? video.commentThread : [],
     type: video.type === 'photo' ? 'photo' : 'video',
+    visibility: ['public', 'followers', 'private'].includes(video.visibility) ? video.visibility : 'public',
     status,
     createdAt,
   };

@@ -12,7 +12,42 @@ const apiRoutes = require('./routes');
 const app = express();
 app.use('/uploads', express.static(require('path').join(__dirname, 'uploads')));
 app.use(express.json());
-app.use(cors());
+
+const normalizeOrigins = (value) => {
+  if (!value) return [];
+  return String(value)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const getAllowedOrigins = () => {
+  const configuredOrigins = normalizeOrigins(process.env.CORS_ORIGIN);
+  const defaultOrigins = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+  ];
+
+  return Array.from(new Set([...defaultOrigins, ...configuredOrigins]));
+};
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  const allowed = new Set(getAllowedOrigins());
+  return allowed.has(origin);
+};
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || isAllowedOrigin(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`Origin ${origin} is not allowed by CORS.`));
+  },
+  credentials: true,
+}));
 
 const DEFAULT_PORT = 5000;
 const PORT = Number(process.env.PORT) || DEFAULT_PORT;
@@ -26,8 +61,14 @@ app.use('/api', apiRoutes);
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin(origin, callback) {
+      if (!origin || isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error(`Origin ${origin} is not allowed by Socket.IO CORS.`));
+    },
     methods: ['GET', 'POST'],
+    credentials: true,
   },
 });
 

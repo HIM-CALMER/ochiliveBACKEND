@@ -17,13 +17,15 @@ const normalizeVideoPayload = (video) => {
   };
 };
 
-const getForYouVideos = async () => {
+const getForYouVideos = async (viewer) => {
+  const followingIds = Array.isArray(viewer?.followingIds) ? viewer.followingIds.map(String) : [];
+  const viewerId = String(viewer?.id || '');
   if (!isMongoReady()) {
     const videos = await listPublishedVideos();
-    return videos.map((video) => normalizeVideoPayload(video));
+    return videos.filter((video) => video.visibility === 'public' || (video.visibility === 'followers' && followingIds.includes(String(video.creatorId))) || (video.visibility === 'private' && String(video.creatorId) === viewerId)).map((video) => normalizeVideoPayload(video));
   }
 
-  const videos = await Video.find({ status: 'published' })
+  const videos = await Video.find({ status: 'published', $or: [{ visibility: 'public' }, { visibility: 'followers', creatorId: { $in: followingIds } }, { visibility: 'private', creatorId: viewerId }] })
     .sort({ createdAt: -1 })
     .lean()
     .limit(50);
@@ -88,16 +90,21 @@ const getRecentLiveRooms = async () => {
   return mapped;
 };
 
-const getTrendingVideos = async () => {
+const getTrendingVideos = async (viewer) => {
   if (!isMongoReady()) {
     const videos = await listPublishedVideos();
+    const followingIds = Array.isArray(viewer?.followingIds) ? viewer.followingIds.map(String) : [];
+    const viewerId = String(viewer?.id || '');
     return videos
+      .filter((video) => video.visibility === 'public' || (video.visibility === 'followers' && followingIds.includes(String(video.creatorId))) || (video.visibility === 'private' && String(video.creatorId) === viewerId))
       .sort((left, right) => (Number(right.likes || 0) + Number(right.views || 0)) - (Number(left.likes || 0) + Number(left.views || 0)))
       .slice(0, 25)
       .map((video) => normalizeVideoPayload(video));
   }
 
-  const videos = await Video.find({ status: 'published' })
+  const followingIds = Array.isArray(viewer?.followingIds) ? viewer.followingIds.map(String) : [];
+  const viewerId = String(viewer?.id || '');
+  const videos = await Video.find({ status: 'published', $or: [{ visibility: 'public' }, { visibility: 'followers', creatorId: { $in: followingIds } }, { visibility: 'private', creatorId: viewerId }] })
     .sort({ likes: -1, views: -1, createdAt: -1 })
     .lean()
     .limit(25);
@@ -121,12 +128,13 @@ const getVideoFeed = async (req, res) => {
     }
 
     if (selectedMode === 'trending') {
-      const payload = await getTrendingVideos();
+      const payload = await getTrendingVideos(req.user);
       return res.json(payload);
     }
 
     if (selectedMode === 'following') {
       const followingIds = Array.isArray(req.user?.followingIds) ? req.user.followingIds.map(String) : [];
+      const viewerId = String(req.user?.id || '');
       if (!followingIds.length) {
         return res.json([]);
       }
@@ -134,7 +142,11 @@ const getVideoFeed = async (req, res) => {
       if (!isMongoReady()) {
         const videos = await listPublishedVideos();
         const payload = videos
-          .filter((video) => followingIds.includes(String(video.creatorId)))
+          .filter((video) => followingIds.includes(String(video.creatorId)) && (
+            video.visibility === 'public'
+            || (video.visibility === 'followers' && followingIds.includes(String(video.creatorId)))
+            || (video.visibility === 'private' && String(video.creatorId) === viewerId)
+          ))
           .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0))
           .slice(0, 25)
           .map((video) => normalizeVideoPayload(video));
@@ -155,7 +167,7 @@ const getVideoFeed = async (req, res) => {
       return res.json(payload);
     }
 
-    const payload = await getForYouVideos();
+    const payload = await getForYouVideos(req.user);
     return res.json(payload);
   } catch (error) {
     console.error('Error fetching video feed:', error.message);
@@ -164,7 +176,7 @@ const getVideoFeed = async (req, res) => {
 };
 
 const uploadVideoPost = async (req, res) => {
-  const { title, mediaUrl, thumbnailUrl, category, description, type } = req.body || {};
+  const { title, mediaUrl, thumbnailUrl, category, description, type, visibility } = req.body || {};
   const token = req.headers.authorization?.split('Bearer ')[1];
 
   if (!token) {
@@ -186,6 +198,7 @@ const uploadVideoPost = async (req, res) => {
           mediaUrl: mediaUrl.trim(),
           thumbnailUrl: thumbnailUrl?.trim() || mediaUrl.trim(),
           type: type === 'photo' ? 'photo' : 'video',
+          visibility: ['public', 'followers', 'private'].includes(visibility) ? visibility : 'public',
           views: 0,
           likes: 0,
           comments: 0,
@@ -200,6 +213,7 @@ const uploadVideoPost = async (req, res) => {
           mediaUrl: mediaUrl.trim(),
           thumbnailUrl: thumbnailUrl?.trim() || mediaUrl.trim(),
           type: type === 'photo' ? 'photo' : 'video',
+          visibility: ['public', 'followers', 'private'].includes(visibility) ? visibility : 'public',
           views: 0,
           likes: 0,
           comments: 0,

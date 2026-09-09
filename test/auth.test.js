@@ -6,6 +6,8 @@ const Module = require('module');
 const { registerUser, checkUsernameAvailability } = require('../src/controllers/authController');
 const { createUser } = require('../src/services/userStore');
 const { searchProfiles, rateProfile } = require('../src/controllers/profileController');
+const { getVideoFeed } = require('../src/controllers/videoController');
+const { createVideo, clearVideoStore } = require('../src/services/videoStore');
 
 function createRes() {
   return {
@@ -192,6 +194,64 @@ test('other users can rate comedian profiles and update the aggregate', async ()
   const selfRes = createRes();
   await rateProfile({ params: { username: 'rating_comedian' }, user: { id: 'comedian-rating-target' }, body: { score: 5 } }, selfRes);
   assert.equal(selfRes.statusCode, 400);
+});
+
+test('following feed in the in-memory fallback enforces visibility rules', async () => {
+  clearVideoStore();
+  await createVideo({
+    id: 'feed-public-video',
+    creatorId: 'creator-feed-privacy',
+    creatorName: 'Creator A',
+    category: 'General',
+    title: 'Public feed video',
+    description: '',
+    mediaUrl: 'https://example.com/public.mp4',
+    thumbnailUrl: 'https://example.com/public.jpg',
+    type: 'video',
+    visibility: 'public',
+    status: 'published',
+    createdAt: new Date(),
+  });
+  await createVideo({
+    id: 'feed-followers-video',
+    creatorId: 'creator-feed-privacy',
+    creatorName: 'Creator A',
+    category: 'General',
+    title: 'Followers feed video',
+    description: '',
+    mediaUrl: 'https://example.com/followers.mp4',
+    thumbnailUrl: 'https://example.com/followers.jpg',
+    type: 'video',
+    visibility: 'followers',
+    status: 'published',
+    createdAt: new Date(),
+  });
+  await createVideo({
+    id: 'feed-private-video',
+    creatorId: 'creator-feed-privacy',
+    creatorName: 'Creator A',
+    category: 'General',
+    title: 'Private feed video',
+    description: '',
+    mediaUrl: 'https://example.com/private.mp4',
+    thumbnailUrl: 'https://example.com/private.jpg',
+    type: 'video',
+    visibility: 'private',
+    status: 'published',
+    createdAt: new Date(),
+  });
+
+  const req = {
+    user: { id: 'viewer-feed-privacy', followingIds: ['creator-feed-privacy'] },
+    query: { mode: 'following' },
+  };
+  const res = createRes();
+
+  await getVideoFeed(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.length, 2);
+  assert.ok(res.body.every((video) => video.visibility !== 'private'));
 });
 
 test('profile posts stay available in the in-memory fallback without MongoDB', async () => {

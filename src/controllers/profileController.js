@@ -212,9 +212,11 @@ const formatPost = (post) => ({
 const getPosts = async (req, res) => {
   const user = await findByUsername(req.params.username);
   if (!user) return res.status(404).json({ message: 'Profile not found.' });
+  const viewerId = String(req.user?.id || '');
+  const canSeeFollowersPosts = viewerId === String(user.id) || (Array.isArray(req.user?.followingIds) && req.user.followingIds.map(String).includes(String(user.id)));
   if (!isMongoReady()) {
     const posts = await listVideosByCreator(user.id);
-    return res.json(posts.map((post) => ({
+    return res.json(posts.filter((post) => post.visibility === 'public' || (post.visibility === 'followers' && canSeeFollowersPosts) || (post.visibility === 'private' && viewerId === String(user.id))).map((post) => ({
       id: post.id || post._id,
       title: post.title,
       description: post.description || '',
@@ -226,7 +228,9 @@ const getPosts = async (req, res) => {
       type: post.type,
     })));
   }
-  const posts = await Video.find({ creatorId: user.id, status: { $in: ['published', 'queued'] } }).sort({ createdAt: -1 }).lean();
+  const visibility = canSeeFollowersPosts ? ['public', 'followers'] : ['public'];
+  if (viewerId === String(user.id)) visibility.push('private');
+  const posts = await Video.find({ creatorId: user.id, status: { $in: ['published', 'queued'] }, visibility: { $in: visibility } }).sort({ createdAt: -1 }).lean();
   return res.json(posts.map(formatPost));
 };
 

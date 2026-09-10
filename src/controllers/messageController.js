@@ -35,9 +35,10 @@ exports.sendMessage = async (req, res) => {
   try {
     const { receiverId, text, mediaUrl, mediaType } = req.body;
     const senderId = req.user.id;
+    const normalizedText = typeof text === 'string' ? text.trim() : '';
 
-    if (!receiverId || !text.trim()) {
-      return res.status(400).json({ message: 'Receiver ID and message text are required' });
+    if (!receiverId || (!normalizedText && !mediaUrl)) {
+      return res.status(400).json({ message: 'Receiver ID and a message or media attachment are required' });
     }
 
     // Get sender and receiver info
@@ -104,7 +105,7 @@ exports.sendMessage = async (req, res) => {
       senderProfilePictureUrl: sender.profilePictureUrl,
       senderAccountType: sender.accountType,
       receiverId,
-      text: text.trim(),
+      text: normalizedText,
       mediaUrl: mediaUrl || '',
       mediaType: mediaType || '',
       inbox: inboxType,
@@ -114,7 +115,7 @@ exports.sendMessage = async (req, res) => {
     await message.save();
 
     // Update conversation last message
-    conversation.lastMessage = text.substring(0, 100);
+    conversation.lastMessage = normalizedText ? normalizedText.substring(0, 100) : (mediaUrl ? 'Shared media' : 'Message');
     conversation.lastMessageTime = new Date();
     conversation.lastMessageSenderId = senderId;
     await conversation.save();

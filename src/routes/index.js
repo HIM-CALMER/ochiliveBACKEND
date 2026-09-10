@@ -1,5 +1,5 @@
 const express = require('express');
-const { registerUser, loginUser, verifyOtp, sendTestEmail, checkUsernameAvailability, requestPasswordReset, resetPassword, googleSignIn } = require('../controllers/authController');
+const { registerUser, loginUser, verifyOtp, sendTestEmail, checkUsernameAvailability, requestPasswordReset, resetPassword, startGoogleSignIn, googleCallback, exchangeGoogleHandoff } = require('../controllers/authController');
 const authenticate = require('../middleware/authGuard');
 const dashboardRoutes = require('./dashboardRoutes');
 const videoRoutes = require('./videoRoutes');
@@ -13,7 +13,9 @@ router.get('/', (req, res) => {
 });
 
 router.post('/auth/register', registerUser);
-router.post('/auth/google', googleSignIn);
+router.get('/auth/google/start', startGoogleSignIn);
+router.get('/auth/google/callback', googleCallback);
+router.post('/auth/google/exchange', exchangeGoogleHandoff);
 router.get('/auth/username-availability', checkUsernameAvailability);
 router.post('/auth/forgot-password', requestPasswordReset);
 router.post('/auth/reset-password', resetPassword);

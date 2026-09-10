@@ -6,6 +6,53 @@ const { getUsernameValidation, normalizeUsername } = require('../utils/usernameP
 
 const getOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
 const hashCode = (code) => crypto.createHash('sha256').update(code).digest('hex');
+const googleStates = new Map();
+const googleHandoffs = new Map();
+
+const getFrontendUrl = () => String(process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+const getGoogleRedirectUri = () => String(process.env.GOOGLE_REDIRECT_URI || `${process.env.BACKEND_PUBLIC_URL || 'http://localhost:5000'}/api/auth/google/callback`).replace(/\/$/, '');
+const getCookie = (req, name) => String(req.headers.cookie || '').split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1);
+
+const createGoogleAccount = async ({ name, email, picture }) => {
+  const normalizedEmail = String(email || '').toLowerCase().trim();
+  const existing = await findByEmail(normalizedEmail);
+  if (existing) {
+    if (picture || name) {
+      await updateById(existing.id, {
+        name: String(name || existing.name || existing.username || 'Google User').trim(),
+        profilePictureUrl: String(picture || existing.profilePictureUrl || '').trim(),
+      });
+    }
+    return { status: 200, message: 'Welcome back via Google sign-in.', user: existing };
+  }
+
+  const displayName = String(name || normalizedEmail.split('@')[0] || 'Google User').trim();
+  const emailLocal = normalizeUsername(normalizedEmail.split('@')[0] || 'google_user');
+  const base = getUsernameValidation(emailLocal).valid ? emailLocal : 'google_user';
+  let username = base;
+  let counter = 1;
+  while (await usernameExists(username)) {
+    username = `${base}_${counter}`;
+    counter += 1;
+  }
+
+  const newUser = {
+    id: `user_${Date.now()}`,
+    name: displayName,
+    email: normalizedEmail,
+    username: normalizeUsername(username),
+    password: 'google-oauth-account',
+    profilePictureUrl: String(picture || '').trim(),
+    bio: '',
+    accountType: 'creator',
+    comedyProfile: {},
+    followerIds: [],
+    followingIds: [],
+  };
+
+  await createUser(newUser);
+  return { status: 201, message: 'Google account created successfully.', user: newUser };
+};
 
 exports.registerUser = async (req, res) => {
   const { name, email, username, password } = req.body || {};
@@ -78,71 +125,73 @@ exports.registerUser = async (req, res) => {
   });
 };
 
-exports.googleSignIn = async (req, res) => {
-  const { name, email, picture } = req.body || {};
-  const normalizedEmail = String(email || '').toLowerCase().trim();
+exports.startGoogleSignIn = (req, res) => {
+  const { GOOGLE_CLIENT_ID: clientId } = process.env;
+  if (!clientId) return res.status(503).json({ message: 'Google sign-in is not configured on the server.' });
 
-  if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
-    return res.status(400).json({ message: 'Please provide a valid Google email address.' });
+  const state = crypto.randomBytes(24).toString('hex');
+  googleStates.set(state, Date.now() + 10 * 60 * 1000);
+  res.setHeader('Set-Cookie', `ochi_google_state=${state}; HttpOnly; SameSite=Lax; Max-Age=600${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
+  const authorization = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  authorization.searchParams.set('client_id', clientId);
+  authorization.searchParams.set('redirect_uri', getGoogleRedirectUri());
+  authorization.searchParams.set('response_type', 'code');
+  authorization.searchParams.set('scope', 'openid email profile');
+  authorization.searchParams.set('state', state);
+  authorization.searchParams.set('access_type', 'online');
+  return res.redirect(authorization.toString());
+};
+
+exports.googleCallback = async (req, res) => {
+  const { code, state, error } = req.query || {};
+  const stateExpiry = googleStates.get(state);
+  googleStates.delete(state);
+  if (error || !stateExpiry || stateExpiry < Date.now() || getCookie(req, 'ochi_google_state') !== state) {
+    return res.redirect(`${getFrontendUrl()}/login?google_error=cancelled`);
   }
-
-  const existing = await findByEmail(normalizedEmail);
-  if (existing) {
-    if (picture || name) {
-      await updateById(existing.id, {
-        name: String(name || existing.name || existing.username || 'Google User').trim(),
-        profilePictureUrl: String(picture || existing.profilePictureUrl || '').trim(),
-      });
-    }
-
-    return res.status(200).json({
-      message: 'Welcome back via Google sign-in.',
-      token: createToken(existing),
-      user: sanitizeUser(existing),
-    });
+  if (!code || !process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.redirect(`${getFrontendUrl()}/login?google_error=not_configured`);
   }
-
-  const displayName = String(name || normalizedEmail.split('@')[0] || 'Google User').trim();
-  const baseUsername = normalizeUsername(String(name || normalizedEmail.split('@')[0] || 'google_user'));
-  const base = normalizeUsername(baseUsername || displayName || 'google_user');
-  const emailLocal = normalizeUsername(normalizedEmail.split('@')[0] || 'google_user');
-  const usernameSeed = base && getUsernameValidation(base).valid ? base : emailLocal;
-
-  let username = usernameSeed;
-  let counter = 1;
-  while (await usernameExists(username)) {
-    username = `${usernameSeed}_${counter}`;
-    counter += 1;
-  }
-
-  const newUser = {
-    id: `user_${Date.now()}`,
-    name: displayName,
-    email: normalizedEmail,
-    username: normalizeUsername(username),
-    password: 'google-oauth-bridge',
-    profilePictureUrl: String(picture || '').trim(),
-    bio: '',
-    accountType: 'creator',
-    comedyProfile: {},
-    followerIds: [],
-    followingIds: [],
-  };
 
   try {
-    await createUser(newUser);
-  } catch (error) {
-    if (error.code === 11000) {
-      return res.status(409).json({ message: 'That Google email is already registered on another account.' });
-    }
-    return res.status(500).json({ message: 'Unable to create your account from Google sign-in.' });
-  }
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: String(code),
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: getGoogleRedirectUri(),
+        grant_type: 'authorization_code',
+      }),
+    });
+    if (!tokenResponse.ok) throw new Error('Google token exchange failed.');
+    const tokenData = await tokenResponse.json();
+    const profileResponse = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+      headers: { authorization: `Bearer ${tokenData.access_token}` },
+    });
+    if (!profileResponse.ok) throw new Error('Google profile lookup failed.');
+    const profile = await profileResponse.json();
+    if (!profile.email_verified || !isValidEmail(profile.email)) throw new Error('Google did not return a verified email.');
 
-  return res.status(201).json({
-    message: 'Google account created successfully.',
-    token: createToken(newUser),
-    user: sanitizeUser(newUser),
-  });
+    const account = await createGoogleAccount({ name: profile.name, email: profile.email, picture: profile.picture });
+    const handoffCode = crypto.randomBytes(32).toString('hex');
+    googleHandoffs.set(handoffCode, { expiresAt: Date.now() + 60 * 1000, user: account.user, message: account.message });
+    return res.redirect(`${getFrontendUrl()}/auth/google/callback?code=${encodeURIComponent(handoffCode)}`);
+  } catch (callbackError) {
+    console.error('Google OAuth callback failed:', callbackError.message);
+    return res.redirect(`${getFrontendUrl()}/login?google_error=failed`);
+  }
+};
+
+exports.exchangeGoogleHandoff = (req, res) => {
+  const handoff = googleHandoffs.get(req.body?.code);
+  if (!handoff || handoff.expiresAt < Date.now()) {
+    googleHandoffs.delete(req.body?.code);
+    return res.status(401).json({ message: 'Google sign-in expired. Please try again.' });
+  }
+  googleHandoffs.delete(req.body.code);
+  return res.status(200).json({ message: handoff.message, token: createToken(handoff.user), user: sanitizeUser(handoff.user) });
 };
 
 exports.verifyOtp = async (req, res) => {

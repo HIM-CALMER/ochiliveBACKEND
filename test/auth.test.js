@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const Module = require('module');
 const { registerUser, checkUsernameAvailability } = require('../src/controllers/authController');
+const { sendMessage } = require('../src/controllers/messageController');
 const { createUser } = require('../src/services/userStore');
 const { searchProfiles, rateProfile } = require('../src/controllers/profileController');
 const { getVideoFeed } = require('../src/controllers/videoController');
@@ -54,6 +55,44 @@ test('registerUser returns an email delivery failure response instead of a fake 
   assert.equal(res.body.pending, false);
   assert.equal(res.body.email, 'otp@example.com');
   assert.match(res.body.message, /delivery|configured|retry/i);
+});
+
+test('sendMessage handles malformed text payloads without throwing', async () => {
+  await createUser({
+    id: 'message-sender-1',
+    name: 'Message Sender',
+    email: 'sender.message@example.com',
+    username: 'message_sender',
+    password: 'hashed-password',
+    profilePictureUrl: '',
+    bio: '',
+    accountType: 'creator',
+    followerIds: [],
+    followingIds: [],
+  });
+  await createUser({
+    id: 'message-receiver-1',
+    name: 'Message Receiver',
+    email: 'receiver.message@example.com',
+    username: 'message_receiver',
+    password: 'hashed-password',
+    profilePictureUrl: '',
+    bio: '',
+    accountType: 'comedian',
+    followerIds: [],
+    followingIds: [],
+  });
+
+  const req = {
+    user: { id: 'message-sender-1' },
+    body: { receiverId: 'message-receiver-1', text: undefined },
+  };
+  const res = createRes();
+
+  await sendMessage(req, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.match(res.body.message, /required/i);
 });
 
 test('username availability rejects reserved names', async () => {

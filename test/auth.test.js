@@ -397,6 +397,7 @@ test('sendOtpEmail uses SMTP when configured', async () => {
   const originalUser = process.env.SMTP_USER;
   const originalPass = process.env.SMTP_PASS;
   const originalFrom = process.env.SMTP_FROM;
+  const originalAllowRealEmail = process.env.SMTP_ALLOW_REAL_EMAIL;
 
   process.env.SMTP_HOST = 'smtp.example.com';
   process.env.SMTP_PORT = '465';
@@ -404,6 +405,7 @@ test('sendOtpEmail uses SMTP when configured', async () => {
   process.env.SMTP_USER = 'test@example.com';
   process.env.SMTP_PASS = 'test-password';
   process.env.SMTP_FROM = 'from@example.com';
+  process.env.SMTP_ALLOW_REAL_EMAIL = 'true';
 
   let sendWasCalled = false;
 
@@ -465,6 +467,11 @@ test('sendOtpEmail uses SMTP when configured', async () => {
       delete process.env.SMTP_FROM;
     } else {
       process.env.SMTP_FROM = originalFrom;
+    }
+    if (originalAllowRealEmail === undefined) {
+      delete process.env.SMTP_ALLOW_REAL_EMAIL;
+    } else {
+      process.env.SMTP_ALLOW_REAL_EMAIL = originalAllowRealEmail;
     }
     delete require.cache[require.resolve('../src/services/emailService')];
   }

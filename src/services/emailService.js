@@ -12,6 +12,10 @@ const ensureTransporter = () => {
     return null;
   }
 
+  if (process.env.NODE_ENV === 'test' && process.env.SMTP_ALLOW_REAL_EMAIL !== 'true') {
+    throw new Error('SMTP delivery is disabled in test mode. Set SMTP_ALLOW_REAL_EMAIL=true only for explicit SMTP verification tests.');
+  }
+
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     throw new Error('SMTP credentials are not configured. Set SMTP_USER and SMTP_PASS in the backend environment.');
   }

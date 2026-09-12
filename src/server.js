@@ -194,4 +194,8 @@ const startServer = (port) => {
   });
 };
 
-connectDB().finally(() => startServer(PORT));
+if (require.main === module && process.env.NODE_ENV !== 'test') {
+  connectDB().finally(() => startServer(PORT));
+}
+
+module.exports = { app, server, io };

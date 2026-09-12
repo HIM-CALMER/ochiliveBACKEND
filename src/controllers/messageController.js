@@ -33,12 +33,21 @@ const determineInboxType = (senderAccountType, receiverAccountType, senderFollow
 // Send Message
 exports.sendMessage = async (req, res) => {
   try {
-    const { receiverId, text, mediaUrl, mediaType } = req.body;
+    const rawReceiverId = String(req.body?.receiverId || '').trim();
+    const rawText = req.body?.text;
+    const rawMediaUrl = typeof req.body?.mediaUrl === 'string' ? req.body.mediaUrl.trim() : '';
+    const rawMediaType = typeof req.body?.mediaType === 'string' ? req.body.mediaType.trim() : '';
     const senderId = req.user.id;
-    const normalizedText = typeof text === 'string' ? text.trim() : '';
+    const normalizedText = typeof rawText === 'string' ? rawText.trim() : '';
+    const normalizedMediaUrl = rawMediaUrl;
+    const normalizedMediaType = ['image', 'video', 'audio'].includes(rawMediaType) ? rawMediaType : '';
 
-    if (!receiverId || (!normalizedText && !mediaUrl)) {
-      return res.status(400).json({ message: 'Receiver ID and a message or media attachment are required' });
+    if (!rawReceiverId || (!normalizedText && !normalizedMediaUrl)) {
+      return res.status(400).json({ message: 'Please choose a valid recipient and add a message or attachment before sending.' });
+    }
+
+    if (normalizedText.length > 2000) {
+      return res.status(400).json({ message: 'Messages must be 2000 characters or fewer.' });
     }
 
     // Get sender and receiver info
@@ -104,10 +113,10 @@ exports.sendMessage = async (req, res) => {
       senderUsername: sender.username,
       senderProfilePictureUrl: sender.profilePictureUrl,
       senderAccountType: sender.accountType,
-      receiverId,
+      receiverId: rawReceiverId,
       text: normalizedText,
-      mediaUrl: mediaUrl || '',
-      mediaType: mediaType || '',
+      mediaUrl: normalizedMediaUrl,
+      mediaType: normalizedMediaType,
       inbox: inboxType,
       isAccepted: inboxType === 'messages' || inboxType === 'connections',
     });

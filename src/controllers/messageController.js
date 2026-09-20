@@ -43,7 +43,7 @@ exports.sendMessage = async (req, res) => {
     const normalizedMediaType = ['image', 'video', 'audio'].includes(rawMediaType) ? rawMediaType : '';
 
     if (!rawReceiverId || (!normalizedText && !normalizedMediaUrl)) {
-      return res.status(400).json({ message: 'Please choose a valid recipient and add a message or attachment before sending.' });
+      return res.status(400).json({ message: 'Recipient and message content are required before sending.' });
     }
 
     if (normalizedText.length > 2000) {

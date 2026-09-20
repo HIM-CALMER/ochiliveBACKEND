@@ -17,12 +17,23 @@ const normalizeVideoPayload = (video) => {
   };
 };
 
+const enrichFeedVideos = async (videos, viewer) => Promise.all(videos.map(async (video) => {
+  const creator = video.creatorId ? await findById(video.creatorId) : null;
+  const followingIds = Array.isArray(viewer?.followingIds) ? viewer.followingIds.map(String) : [];
+  return {
+    ...video,
+    creatorUsername: creator?.username || video.creatorUsername || '',
+    isFollowing: followingIds.includes(String(video.creatorId)),
+  };
+}));
+
 const getForYouVideos = async (viewer) => {
   const followingIds = Array.isArray(viewer?.followingIds) ? viewer.followingIds.map(String) : [];
   const viewerId = String(viewer?.id || '');
   if (!isMongoReady()) {
     const videos = await listPublishedVideos();
-    return videos.filter((video) => video.visibility === 'public' || (video.visibility === 'followers' && followingIds.includes(String(video.creatorId))) || (video.visibility === 'private' && String(video.creatorId) === viewerId)).map((video) => normalizeVideoPayload(video));
+    const visible = videos.filter((video) => video.visibility === 'public' || (video.visibility === 'followers' && followingIds.includes(String(video.creatorId))) || (video.visibility === 'private' && String(video.creatorId) === viewerId)).map((video) => normalizeVideoPayload(video));
+    return enrichFeedVideos(visible, viewer);
   }
 
   const videos = await Video.find({ status: 'published', $or: [{ visibility: 'public' }, { visibility: 'followers', creatorId: { $in: followingIds } }, { visibility: 'private', creatorId: viewerId }] })
@@ -30,11 +41,12 @@ const getForYouVideos = async (viewer) => {
     .lean()
     .limit(50);
 
-  return videos.map(({ _id, __v, createdAt, ...video }) => ({
+  const payload = videos.map(({ _id, __v, createdAt, ...video }) => ({
     ...video,
     id: _id.toString(),
     createdAt: createdAt ? new Date(createdAt).toISOString() : undefined,
   }));
+  return enrichFeedVideos(payload, viewer);
 };
 
 const getFollowingVideos = async (userId) => {
@@ -54,11 +66,12 @@ const getFollowingVideos = async (userId) => {
     .lean()
     .limit(25);
 
-  return videos.map(({ _id, __v, createdAt, ...video }) => ({
+  const payload = videos.map(({ _id, __v, createdAt, ...video }) => ({
     ...video,
     id: _id.toString(),
     createdAt: createdAt ? new Date(createdAt).toISOString() : undefined,
   }));
+  return enrichFeedVideos(payload, { id: userId });
 };
 
 const getRecentLiveRooms = async () => {
@@ -109,11 +122,12 @@ const getTrendingVideos = async (viewer) => {
     .lean()
     .limit(25);
 
-  return videos.map(({ _id, __v, createdAt, ...video }) => ({
+  const payload = videos.map(({ _id, __v, createdAt, ...video }) => ({
     ...video,
     id: _id.toString(),
     createdAt: createdAt ? new Date(createdAt).toISOString() : undefined,
   }));
+  return enrichFeedVideos(payload, viewer);
 };
 
 const getVideoFeed = async (req, res) => {

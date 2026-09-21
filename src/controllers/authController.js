@@ -122,6 +122,7 @@ exports.registerUser = async (req, res) => {
     message: 'Verification code sent. Please confirm the code to finish creating your account.',
     pending: true,
     email: normalizedEmail,
+    ...(process.env.NODE_ENV !== 'production' && process.env.RETURN_TEST_OTP === 'true' ? { otp } : {}),
   });
 };
 

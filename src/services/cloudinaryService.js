@@ -53,7 +53,20 @@ const getVideoThumbnailUrl = (publicId) => {
   });
 };
 
+const getOptimizedMediaUrl = (publicId, resourceType = 'image') => {
+  ensureCloudinaryConfig();
+  return getCloudinary().url(publicId, {
+    resource_type: resourceType,
+    secure: true,
+    transformation: [
+      { width: 1080, crop: 'limit' },
+      { quality: 'auto:good' },
+    ],
+  });
+};
+
 module.exports = {
   uploadBuffer,
   getVideoThumbnailUrl,
+  getOptimizedMediaUrl,
 };

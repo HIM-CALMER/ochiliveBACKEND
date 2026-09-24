@@ -5,7 +5,7 @@ const requireComedian = require('../middleware/comedianGuard');
 const LiveRoom = require('../models/LiveRoom');
 const { createRoom, startRoom, endRoom } = require('../controllers/liveController');
 const { getVideoFeed, uploadVideoPost } = require('../controllers/videoController');
-const { getVideoThumbnailUrl, uploadBuffer } = require('../services/cloudinaryService');
+const { getVideoThumbnailUrl, getOptimizedMediaUrl, uploadBuffer } = require('../services/cloudinaryService');
 const {
   incrementViews,
   likeVideo,
@@ -127,7 +127,7 @@ router.post('/upload-file', authenticate, handleMediaUpload, async (req, res) =>
     return res.status(201).json({
       message: 'File uploaded.',
       url: result.secure_url,
-      mediaUrl: result.secure_url,
+      mediaUrl: getOptimizedMediaUrl(result.public_id, resourceType),
       thumbnailUrl,
       publicId: result.public_id,
       resourceType,

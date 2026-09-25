@@ -55,12 +55,14 @@ const getVideoThumbnailUrl = (publicId) => {
 
 const getOptimizedMediaUrl = (publicId, resourceType = 'image') => {
   ensureCloudinaryConfig();
+  const isVideo = resourceType === 'video';
   return getCloudinary().url(publicId, {
     resource_type: resourceType,
     secure: true,
     transformation: [
-      { width: 1080, crop: 'limit' },
-      { quality: 'auto:good' },
+      { width: isVideo ? 720 : 1080, crop: 'limit' },
+      { quality: isVideo ? 'auto:eco' : 'auto:good' },
+      { fetch_format: 'auto' },
     ],
   });
 };

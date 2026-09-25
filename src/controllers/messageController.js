@@ -124,7 +124,7 @@ exports.sendMessage = async (req, res) => {
     await message.save();
 
     // Update conversation last message
-    conversation.lastMessage = normalizedText ? normalizedText.substring(0, 100) : (mediaUrl ? 'Shared media' : 'Message');
+    conversation.lastMessage = normalizedText ? normalizedText.substring(0, 100) : (normalizedMediaUrl ? 'Shared media' : 'Message');
     conversation.lastMessageTime = new Date();
     conversation.lastMessageSenderId = senderId;
     await conversation.save();

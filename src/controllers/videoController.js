@@ -20,10 +20,13 @@ const normalizeVideoPayload = (video) => {
 const enrichFeedVideos = async (videos, viewer) => Promise.all(videos.map(async (video) => {
   const creator = video.creatorId ? await findById(video.creatorId) : null;
   const followingIds = Array.isArray(viewer?.followingIds) ? viewer.followingIds.map(String) : [];
+  const viewerId = String(viewer?.id || '');
+  const likedBy = Array.isArray(video.likedBy) ? video.likedBy.map(String) : [];
   return {
     ...video,
     creatorUsername: creator?.username || video.creatorUsername || '',
     isFollowing: followingIds.includes(String(video.creatorId)),
+    liked: Boolean(viewerId && likedBy.includes(viewerId)),
   };
 }));
 
@@ -164,7 +167,7 @@ const getVideoFeed = async (req, res) => {
           .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0))
           .slice(0, 25)
           .map((video) => normalizeVideoPayload(video));
-        return res.json(payload);
+        return res.json(await enrichFeedVideos(payload, req.user));
       }
 
       const videos = await Video.find({ status: 'published', creatorId: { $in: followingIds } })
@@ -178,7 +181,7 @@ const getVideoFeed = async (req, res) => {
         createdAt: createdAt ? new Date(createdAt).toISOString() : undefined,
       }));
 
-      return res.json(payload);
+      return res.json(await enrichFeedVideos(payload, req.user));
     }
 
     const payload = await getForYouVideos(req.user);

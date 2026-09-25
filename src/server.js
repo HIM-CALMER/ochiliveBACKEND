@@ -171,7 +171,7 @@ io.on('connection', (socket) => {
     const { conversationId, userId } = data;
     io.to(`user:${userId}`).emit('message:conversation-cleared', {
       conversationId,
-    });
+    }); 
   });
 
   socket.on('disconnect', () => {

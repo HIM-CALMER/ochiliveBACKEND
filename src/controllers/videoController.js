@@ -62,6 +62,7 @@ const getFollowingVideos = async (userId) => {
       .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0))
       .slice(0, 25)
       .map((video) => normalizeVideoPayload(video));
+    return enrichFeedVideos(payload, viewer);
   }
 
   const videos = await Video.find({ status: 'published', creatorId: userId })
@@ -111,11 +112,12 @@ const getTrendingVideos = async (viewer) => {
     const videos = await listPublishedVideos();
     const followingIds = Array.isArray(viewer?.followingIds) ? viewer.followingIds.map(String) : [];
     const viewerId = String(viewer?.id || '');
-    return videos
+    const payload = videos
       .filter((video) => video.visibility === 'public' || (video.visibility === 'followers' && followingIds.includes(String(video.creatorId))) || (video.visibility === 'private' && String(video.creatorId) === viewerId))
       .sort((left, right) => (Number(right.likes || 0) + Number(right.views || 0)) - (Number(left.likes || 0) + Number(left.views || 0)))
       .slice(0, 25)
       .map((video) => normalizeVideoPayload(video));
+    return enrichFeedVideos(payload, viewer);
   }
 
   const followingIds = Array.isArray(viewer?.followingIds) ? viewer.followingIds.map(String) : [];
